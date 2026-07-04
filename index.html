@@ -362,18 +362,18 @@ const auth = firebase.auth();
    ones you set up in the Firebase console (step 3 above).
    ============================================================ */
 const AUTH_CREDENTIALS = {
-  ey:      { email:'elizabethyip@redboxtoy.com',      password:'C7LDm%^vOaa%' },
-  ericlai: { email:'ericlai@motormaxtoy.com', password:'3$eUFNxo11mU' },
-  leofan:  { email:'leofan@motormaxtoy.com',  password:'l^PliL3c0W#8' },
+  ey:      { email:'elizabethyip@redboxtoy.com', password:'REPLACE_WITH_REAL_PASSWORD' },
+  ericlai: { email:'ericlai@motormaxtoy.com',    password:'REPLACE_WITH_REAL_PASSWORD' },
+  leofan:  { email:'leofan@motormaxtoy.com',     password:'REPLACE_WITH_REAL_PASSWORD' },
 };
 
 /* ============================================================
    STATIC DATA: users, workflow, packing defaults
    ============================================================ */
 const DEFAULT_USERS = [
-  { id:'ey', name:'Elizabeth Yip', pin:'1201' },
-  { id:'ericlai', name:'Eric Lai', pin:'1176' },
-  { id:'leofan', name:'Leo Fan', pin:'1186' },
+  { id:'ey', name:'EY', pin:'0000' },
+  { id:'ericlai', name:'Eric Lai', pin:'0000' },
+  { id:'leofan', name:'Leo Fan', pin:'0000' },
 ];
 
 const PACKING_DEFAULTS = {
@@ -393,7 +393,7 @@ const WORKFLOW = [
   ]},
   { id:'ph2', label:'Phase 2 — Quotation', tasks:[
     { id:'t2_1', text:'Prepare FOB Yantian unit cost, polyfoam tooling cost, deco tooling cost' },
-    { id:'t2_2', text:'Send quotation to Norev PM' },
+    { id:'t2_2', text:'Send quotation to Norev PM', sd:true },
     { id:'t2_3', text:'Customer accepts quotation', rd:true },
   ]},
   { id:'ph3', label:'Phase 3 — Item registration & tooling transfer', tasks:[
@@ -405,7 +405,7 @@ const WORKFLOW = [
   ]},
   { id:'ph4', label:'Phase 4 — Deco sampling', tasks:[
     { id:'t4_1', text:'Factory prepares deco samples (2 pcs per colour)' },
-    { id:'t4_2', text:'Deco samples sent to Norev / MengYi for review' },
+    { id:'t4_2', text:'Deco samples sent to Norev / MengYi for review', sd:true },
     { id:'t4_3', text:'Customer deco sample comments received', rd:true },
     { id:'t4_4', text:'Revised samples produced (if required)' },
     { id:'t4_5', text:'Deco samples approved by customer', rd:true },
@@ -416,8 +416,9 @@ const WORKFLOW = [
     { id:'t5_3', text:'50% deposit payment received from Vincci Chan (Norev HK GM)', rd:true },
     { id:'t5_4', text:'Issue Sales Note + Contract to factory (include +8 extra samples)' },
     { id:'t5_5', text:'Pre-production sample (PPS) produced by factory' },
-    { id:'t5_6', text:'PPS sent for customer approval' },
-    { id:'t5_7', text:'PPS / PPQC approved', rd:true },
+    { id:'t5_6', text:'PPS sent for customer approval', sd:true },
+    { id:'t5_7', text:'PPS approved by customer', rd:true },
+    { id:'t5_8', text:'PPQC document received from Norev (for production reference — no approval needed)', rd:true },
   ]},
   { id:'ph6', label:'Phase 6 — Packaging & pre-shipment', tasks:[
     { id:'t6_1', text:'Packaging artwork files received from customer', rd:true },
@@ -445,6 +446,47 @@ const WORKFLOW = [
 function allTaskIds(){ return WORKFLOW.flatMap(p=>p.tasks.map(t=>t.id)); }
 function taskDef(id){ for(const p of WORKFLOW) for(const t of p.tasks) if(t.id===id) return t; return null; }
 function phaseOfTask(id){ return WORKFLOW.find(p=>p.tasks.some(t=>t.id===id)); }
+
+/* ============================================================
+   WEEK-NUMBER SHIP DATE — ISO 8601 (Monday-start) week calc.
+   Given a year + week number, returns the Monday and Sunday of
+   that week. estShipDate stored internally is the Monday, in
+   YYYY-MM-DD form, so existing "days until" logic keeps working.
+   ============================================================ */
+function isoWeekToDates(year, week){
+  const jan4 = new Date(Date.UTC(year,0,4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+  const monday = new Date(week1Monday);
+  monday.setUTCDate(week1Monday.getUTCDate() + (week-1)*7);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate()+6);
+  return { monday, sunday };
+}
+function formatShipWeek(p){
+  if(!p.estShipYear || !p.estShipWeekNum) return '—';
+  const { monday, sunday } = isoWeekToDates(p.estShipYear, p.estShipWeekNum);
+  const fmt = d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  return `Wk ${p.estShipWeekNum}/${p.estShipYear} (${fmt(monday)}–${fmt(sunday)})`;
+}
+
+/* ============================================================
+   PERMISSIONS — EY is master admin (full read/write on every
+   project). Everyone else can only edit projects they created
+   themselves. This is a client-side check for now; true
+   server-side enforcement would need matching Firestore rules.
+   ============================================================ */
+function canEdit(p){
+  if(!state.currentUser) return false;
+  if(state.currentUser.id === 'ey') return true;
+  return p.createdByUserId === state.currentUser.id;
+}
+function requireEdit(p){
+  if(canEdit(p)) return true;
+  alert(`Only EY or ${p.createdByName||'the person who created this project'} can make changes to this project.`);
+  return false;
+}
 
 /* ============================================================
    STATE
@@ -641,7 +683,7 @@ function outstandingForProject(project){
 function allOutstanding(){
   return state.projects.flatMap(p=>outstandingForProject(p));
 }
-function projectTitle(p){ return `${p.modelName||'Untitled'} — ${p.mengyiBaseNumber||''}`; }
+function projectTitle(p){ return `${p.poNumber?('PO '+p.poNumber+' — '):''}${p.modelName||'Untitled'}`; }
 function packingFor(project){
   const d = PACKING_DEFAULTS[project.scale] || {pcsPerCarton:null, cartonsPerMaster:null};
   const pcsPerCarton = (project.packing && project.packing.pcsPerCarton!=null) ? project.packing.pcsPerCarton : d.pcsPerCarton;
@@ -699,7 +741,7 @@ function renderDashboard(main){
 }
 function projectCardHTML(p){
   const prog = computeProgress(p);
-  const eta = p.estShipDate ? new Date(p.estShipDate).toLocaleDateString() : '—';
+  const eta = formatShipWeek(p);
   const d = daysUntil(p.estShipDate);
   const urgentEta = d!==null && d<=14 && d>=0;
   const photo = (p.colors && p.colors[0] && p.colors[0].photoURL) ? p.colors[0].photoURL : null;
@@ -707,12 +749,12 @@ function projectCardHTML(p){
     <div class="proj-card" data-pid="${p.id}">
       <div class="proj-thumb" style="${photo?`background-image:url('${photo}')`:''}">${photo?'':'<i class="ti ti-photo"></i>'}</div>
       <div class="proj-info">
-        <div class="title">${p.modelName||'Untitled'}</div>
+        <div class="title">${p.poNumber?('PO '+p.poNumber+' · '):''}${p.modelName||'Untitled'}</div>
         <div class="sub">${p.mengyiBaseNumber?('MengYi '+p.mengyiBaseNumber+' · '):''}${p.norevNumber?('Norev '+p.norevNumber+' · '):''}${p.scale||''} · PM: ${p.motormaxPM||'—'}</div>
       </div>
       <span class="phase-badge">${currentPhaseLabel(p)}</span>
       <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
-      <div class="eta-tag ${urgentEta?'urgent':''}">Ship: ${eta}</div>
+      <div class="eta-tag ${urgentEta?'urgent':''}" style="width:120px;">${eta}</div>
     </div>`;
 }
 function attachProjectCardEvents(container){
@@ -728,6 +770,7 @@ function outstandingRowHTML(t){
   return `
     <div class="list-row" data-pid="${t.projectId}">
       <span class="task-text">${t.text}</span>
+      <span class="chip">${t.phaseLabel.replace(/Phase \d+ — /,'')}</span>
       <span class="chip">${t.projectTitle}</span>
       ${t.urgent?'<span class="chip urgent">Due soon</span>':''}
       <button class="btn btn-sm btn-ghost open-project">Open</button>
@@ -757,16 +800,17 @@ function renderProjectsList(main){
   }
 }
 
-/* ---------- Outstanding tasks (full) ---------- */
+/* ---------- Outstanding tasks (full) — grouped by PO first ---------- */
 function renderOutstanding(main){
-  const items = allOutstanding().sort((a,b)=>b.urgent-a.urgent);
-  const byPhase = {};
-  items.forEach(t=>{ (byPhase[t.phaseLabel] = byPhase[t.phaseLabel]||[]).push(t); });
+  const groups = state.projects
+    .map(p=>({p, tasks:outstandingForProject(p)}))
+    .filter(g=>g.tasks.length);
+  groups.sort((a,b)=> (b.tasks.some(t=>t.urgent)?1:0) - (a.tasks.some(t=>t.urgent)?1:0));
   main.innerHTML = `<div class="page-head"><h2>Outstanding Tasks</h2></div>` +
-    (items.length ? Object.entries(byPhase).map(([phase, tasks])=>`
-      <div class="section-title">${phase}</div>
+    (groups.length ? groups.map(({p,tasks})=>`
+      <div class="section-title">${projectTitle(p)} <span class="chip">${currentPhaseLabel(p)}</span> <span class="chip">${p.colors&&p.colors.length?p.colors.length+' colour'+(p.colors.length>1?'s':''):''}</span></div>
       <div class="list-table" style="margin-bottom:18px;">${tasks.map(outstandingRowHTML).join('')}</div>
-    `).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding across any project.</div>`);
+    `).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding across any PO.</div>`);
   attachOutstandingEvents(main);
 }
 
@@ -776,6 +820,7 @@ function renderNewProjectForm(main){
     <div class="page-head"><h2>New Project</h2></div>
     <div class="form-card">
       <div class="form-grid">
+        <div class="form-group"><label>PO Number</label><input id="f-po" placeholder="e.g. PO-2026-0417"></div>
         <div class="form-group"><label>Model name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo"></div>
         <div class="form-group"><label>Scale</label>
           <select id="f-scale"><option value="1:12">1:12</option><option value="1:18">1:18</option></select>
@@ -787,7 +832,14 @@ function renderNewProjectForm(main){
           <select id="f-pm">${state.users.map(u=>`<option value="${u.name}">${u.name}</option>`).join('')}</select>
         </div>
         <div class="form-group"><label>Order qty</label><input id="f-qty" type="number" placeholder="e.g. 3000"></div>
-        <div class="form-group"><label>Estimated ship date</label><input id="f-eta" type="date"></div>
+        <div class="form-group">
+          <label>Estimated ship — week number</label>
+          <div style="display:flex;gap:8px;">
+            <input id="f-eta-week" type="number" min="1" max="53" placeholder="Wk (1-53)" style="width:50%;">
+            <input id="f-eta-year" type="number" placeholder="Year" value="${new Date().getFullYear()}" style="width:50%;">
+          </div>
+          <div id="f-eta-preview" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+        </div>
         <div class="form-group full">
           <label>Special items</label>
           <div class="checkbox-row">
@@ -809,40 +861,73 @@ function renderNewProjectForm(main){
     </div>
   `;
   let colorRows = [{letter:'A', name:''}];
-  function renderColorInputs(){
-    const mengyi = document.getElementById('f-mengyi').value || '####';
-    const box = document.getElementById('color-inputs');
+  const box = document.getElementById('color-inputs');
+  function mengyiVal(){ return document.getElementById('f-mengyi').value || '####'; }
+  function paintColorRows(){
     box.innerHTML = colorRows.map((c,i)=>`
-      <div class="color-input-row">
-        <input style="max-width:60px" value="${c.letter}" data-idx="${i}" data-field="letter" maxlength="1" placeholder="A">
-        <input value="${c.name}" data-idx="${i}" data-field="name" placeholder="Colour name e.g. Red">
-        <span class="code-preview">N${c.letter||'x'}${mengyi}</span>
-        ${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color" data-idx="${i}"><i class="ti ti-x"></i></button>`:''}
+      <div class="color-input-row" data-idx="${i}">
+        <input style="max-width:60px" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A">
+        <input value="${c.name}" data-field="name" placeholder="Colour name e.g. Red">
+        <span class="code-preview" data-preview>N${c.letter||'x'}${mengyiVal()}</span>
+        ${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color" type="button"><i class="ti ti-x"></i></button>`:''}
       </div>`).join('');
-    box.querySelectorAll('input').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        colorRows[inp.dataset.idx][inp.dataset.field] = inp.value.toUpperCase().slice(0, inp.dataset.field==='letter'?1:99);
-        renderColorInputs();
-      });
-    });
-    box.querySelectorAll('.remove-color').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ colorRows.splice(btn.dataset.idx,1); renderColorInputs(); });
-    });
   }
-  renderColorInputs();
-  document.getElementById('f-mengyi').addEventListener('input', renderColorInputs);
+  paintColorRows();
+  // Event delegation on the container — attached ONCE, so typing never
+  // triggers a full re-render and the input never loses focus.
+  box.addEventListener('input', (e)=>{
+    const row = e.target.closest('.color-input-row'); if(!row) return;
+    const idx = Number(row.dataset.idx);
+    const field = e.target.dataset.field; if(!field) return;
+    if(field==='letter'){
+      const upper = e.target.value.toUpperCase().slice(0,1);
+      colorRows[idx].letter = upper;
+      if(e.target.value !== upper) e.target.value = upper;
+    } else {
+      colorRows[idx].name = e.target.value;
+    }
+    row.querySelector('[data-preview]').textContent = `N${colorRows[idx].letter||'x'}${mengyiVal()}`;
+  });
+  box.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.remove-color'); if(!btn) return;
+    const row = btn.closest('.color-input-row');
+    colorRows.splice(Number(row.dataset.idx),1);
+    paintColorRows();
+  });
+  document.getElementById('f-mengyi').addEventListener('input', ()=>{
+    box.querySelectorAll('.color-input-row').forEach(row=>{
+      const idx = Number(row.dataset.idx);
+      row.querySelector('[data-preview]').textContent = `N${colorRows[idx].letter||'x'}${mengyiVal()}`;
+    });
+  });
   document.getElementById('add-color').addEventListener('click', ()=>{
     const nextLetter = String.fromCharCode(65 + colorRows.length);
     colorRows.push({letter:nextLetter, name:''});
-    renderColorInputs();
+    paintColorRows();
   });
+  function updateEtaPreview(){
+    const wk = Number(document.getElementById('f-eta-week').value);
+    const yr = Number(document.getElementById('f-eta-year').value);
+    const prev = document.getElementById('f-eta-preview');
+    if(wk>=1 && wk<=53 && yr){
+      const { monday, sunday } = isoWeekToDates(yr, wk);
+      prev.textContent = `${monday.toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${sunday.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`;
+    } else prev.textContent = '';
+  }
+  document.getElementById('f-eta-week').addEventListener('input', updateEtaPreview);
+  document.getElementById('f-eta-year').addEventListener('input', updateEtaPreview);
   document.getElementById('cancel-project').addEventListener('click', ()=>{ state.view='dashboard'; render(); });
   document.getElementById('save-project').addEventListener('click', async ()=>{
     const mengyiBase = document.getElementById('f-mengyi').value.trim();
     const colors = colorRows.filter(c=>c.letter).map(c=>({
       letter:c.letter, name:c.name, mengyiCode:`N${c.letter}${mengyiBase}`, photoURL:''
     }));
+    const wk = Number(document.getElementById('f-eta-week').value)||null;
+    const yr = Number(document.getElementById('f-eta-year').value)||null;
+    let estShipDate = null;
+    if(wk && yr){ estShipDate = isoWeekToDates(yr, wk).monday.toISOString().slice(0,10); }
     const project = {
+      poNumber: document.getElementById('f-po').value.trim(),
       modelName: document.getElementById('f-model').value.trim(),
       scale: document.getElementById('f-scale').value,
       norevNumber: document.getElementById('f-norev').value.trim(),
@@ -850,7 +935,9 @@ function renderNewProjectForm(main){
       motormaxItemNumber: document.getElementById('f-motormax').value.trim(),
       motormaxPM: document.getElementById('f-pm').value,
       qty: Number(document.getElementById('f-qty').value)||null,
-      estShipDate: document.getElementById('f-eta').value || null,
+      estShipWeekNum: wk,
+      estShipYear: yr,
+      estShipDate,
       specialItems: {
         chassisPlate: document.getElementById('f-chassis').checked,
         booklet: document.getElementById('f-booklet').checked,
@@ -860,7 +947,8 @@ function renderNewProjectForm(main){
       packing: {},
       tasks: {},
       createdAt: Date.now(),
-      createdBy: state.currentUser.name,
+      createdByName: state.currentUser.name,
+      createdByUserId: state.currentUser.id,
     };
     if(!project.modelName){ alert('Please enter a model name.'); return; }
     const ref = await db.collection('projects').add(project);
@@ -874,20 +962,23 @@ function renderProjectDetail(main){
   const p = state.projects.find(x=>x.id===state.activeProjectId);
   if(!p){ state.activeProjectId=null; render(); return; }
   const prog = computeProgress(p);
+  const editable = canEdit(p);
   main.innerHTML = `
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back</button>
       <h2 style="margin-left:10px;">${p.modelName}</h2>
+      ${!editable?`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${p.createdByName||'another PM'}</span>`:''}
     </div>
     <div class="detail-head">
       <div class="field-grid">
+        <div><div class="field-label">PO Number</div><div class="field-val">${p.poNumber||'—'}</div></div>
         <div><div class="field-label">Norev #</div><div class="field-val">${p.norevNumber||'—'}</div></div>
         <div><div class="field-label">MengYi base #</div><div class="field-val">${p.mengyiBaseNumber||'—'}</div></div>
         <div><div class="field-label">Motormax item #</div><div class="field-val">${p.motormaxItemNumber||'—'}</div></div>
         <div><div class="field-label">Scale</div><div class="field-val">${p.scale||'—'}</div></div>
         <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${p.motormaxPM||'—'}</div></div>
         <div><div class="field-label">Order qty</div><div class="field-val">${p.qty||'—'}</div></div>
-        <div><div class="field-label">Est. ship date</div><div class="field-val">${p.estShipDate?new Date(p.estShipDate).toLocaleDateString():'—'}</div></div>
+        <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(p)}</div></div>
         <div><div class="field-label">Progress</div><div class="field-val">${prog}%</div></div>
       </div>
     </div>
@@ -937,6 +1028,7 @@ function taskRowHTML(p, t){
         <div class="task-meta">
           ${done?`<span>✓ ${rec.doneBy||''} on ${rec.doneDate?new Date(rec.doneDate).toLocaleDateString():''}</span>`:''}
           ${t.rd?`<span>${rec.receivedDate?('Received '+new Date(rec.receivedDate).toLocaleDateString()):'No received date logged'}</span> <button data-action="setdate">Log date</button>`:''}
+          ${t.sd?`<span>${rec.sentDate?('Sent '+new Date(rec.sentDate).toLocaleDateString()):'No sent date logged'}</span> <button data-action="setsentdate">Log sent date</button>`:''}
           ${t.rd?`<button data-action="note">${rec.note?'Edit note':'Add note (e.g. link to file)'}</button>`:''}
           ${rec.note?`<span class="chip">${rec.note}</span>`:''}
         </div>
@@ -947,6 +1039,7 @@ function attachTaskEvents(tc, p){
   tc.querySelectorAll('.task-row').forEach(row=>{
     const tid = row.dataset.tid;
     row.querySelector('[data-action="toggle"]').addEventListener('click', async ()=>{
+      if(!requireEdit(p)) return;
       const rec = (p.tasks && p.tasks[tid]) || {};
       const newDone = !rec.done;
       const update = {
@@ -958,12 +1051,21 @@ function attachTaskEvents(tc, p){
     });
     const dateBtn = row.querySelector('[data-action="setdate"]');
     if(dateBtn) dateBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(p)) return;
       const val = prompt('Received date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
       if(!val) return;
       await db.collection('projects').doc(p.id).update({ [`tasks.${tid}.receivedDate`]: val });
     });
+    const sentBtn = row.querySelector('[data-action="setsentdate"]');
+    if(sentBtn) sentBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(p)) return;
+      const val = prompt('Sent date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+      if(!val) return;
+      await db.collection('projects').doc(p.id).update({ [`tasks.${tid}.sentDate`]: val });
+    });
     const noteBtn = row.querySelector('[data-action="note"]');
     if(noteBtn) noteBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(p)) return;
       const rec = (p.tasks && p.tasks[tid]) || {};
       const val = prompt('Note (e.g. a link to the file/screenshot in Google Drive or email):', rec.note||'');
       if(val===null) return;
@@ -1000,6 +1102,7 @@ function renderPackingTab(tc, p){
     <button class="btn btn-sm" id="pk-save" style="margin-top:8px;">Save packing</button>
   `;
   document.getElementById('pk-save').addEventListener('click', async ()=>{
+    if(!requireEdit(p)) return;
     const pcs = Number(document.getElementById('pk-pcs').value)||null;
     const cartons = Number(document.getElementById('pk-cartons').value)||null;
     await db.collection('projects').doc(p.id).update({ packing: { pcsPerCarton:pcs, cartonsPerMaster:cartons } });
