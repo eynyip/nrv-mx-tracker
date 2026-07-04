@@ -396,9 +396,7 @@ const WORKFLOW = [
     { id:'t2_2', text:'Send quotation to Norev PM', sd:true },
     { id:'t2_3', text:'Customer accepts quotation', rd:true },
   ]},
-  { id:'ph3', label:'Phase 3 — Item registration & tooling transfer', tasks:[
-    { id:'t3_1', text:'Ask Louisa to assign Motormax item # for ERP registration' },
-    { id:'t3_2', text:'Motormax item # confirmed by Louisa', rd:true },
+  { id:'ph3', label:'Phase 3 — Tooling transfer', tasks:[
     { id:'t3_3', text:'Confirm tooling status with Norev / tooling vendor' },
     { id:'t3_4', text:'Tooling ready for transfer to factory' },
     { id:'t3_5', text:'Tooling received at factory', rd:true },
@@ -501,6 +499,9 @@ let state = {
   detailTab: 'workflow',
   loginSelectedUser: null,
   pinBuffer: '',
+  editingProjectId: null,
+  outstandingFilterPM: '',
+  outstandingFilterItem: '',
 };
 
 /* ============================================================
@@ -625,6 +626,7 @@ document.querySelectorAll('.nav-item').forEach(el=>{
     el.classList.add('active');
     state.view = el.dataset.view;
     state.activeProjectId = null;
+    state.editingProjectId = null;
     render();
   });
 });
@@ -705,7 +707,7 @@ function render(){
   if(state.view==='dashboard') renderDashboard(main);
   else if(state.view==='projects') renderProjectsList(main);
   else if(state.view==='outstanding') renderOutstanding(main);
-  else if(state.view==='new') renderNewProjectForm(main);
+  else if(state.view==='new') renderNewProjectForm(main, state.editingProjectId ? state.projects.find(x=>x.id===state.editingProjectId) : null);
 }
 
 /* ---------- Dashboard ---------- */
@@ -713,18 +715,36 @@ function renderDashboard(main){
   const total = state.projects.length;
   const inSampling = state.projects.filter(p=>currentPhaseLabel(p).includes('Deco sampling')).length;
   const inProduction = state.projects.filter(p=>['PO & pre-production','Packaging & pre-shipment'].includes(currentPhaseLabel(p))).length;
-  const outstanding = allOutstanding();
+  const pmOptions = [...new Set(state.projects.map(p=>p.motormaxPM).filter(Boolean))];
+  const itemOptions = [...new Set(state.projects.flatMap(p=>(p.colors||[]).map(c=>c.mengyiCode)))];
+  let outstanding = allOutstanding();
+  if(state.outstandingFilterPM) outstanding = outstanding.filter(t=>{
+    const proj = state.projects.find(p=>p.id===t.projectId); return proj && proj.motormaxPM===state.outstandingFilterPM;
+  });
+  if(state.outstandingFilterItem) outstanding = outstanding.filter(t=>{
+    const proj = state.projects.find(p=>p.id===t.projectId); return proj && (proj.colors||[]).some(c=>c.mengyiCode===state.outstandingFilterItem);
+  });
   main.innerHTML = `
     <div class="page-head"><h2>Dashboard</h2></div>
     <div class="stat-row">
       <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total projects</div></div>
       <div class="stat-card"><div class="num">${inSampling}</div><div class="lbl">In deco sampling</div></div>
       <div class="stat-card"><div class="num">${inProduction}</div><div class="lbl">In production</div></div>
-      <div class="stat-card warn"><div class="num">${outstanding.length}</div><div class="lbl">Outstanding tasks</div></div>
+      <div class="stat-card warn"><div class="num">${allOutstanding().length}</div><div class="lbl">Outstanding tasks</div></div>
     </div>
     <div class="section-title">Recent projects</div>
     <div id="dash-projects"></div>
     <div class="section-title" style="margin-top:24px;">Top outstanding tasks</div>
+    <div style="display:flex; gap:10px; margin-bottom:12px;">
+      <select id="filter-pm" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All PMs</option>
+        ${pmOptions.map(pm=>`<option value="${pm}" ${state.outstandingFilterPM===pm?'selected':''}>${pm}</option>`).join('')}
+      </select>
+      <select id="filter-item" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All items</option>
+        ${itemOptions.map(code=>`<option value="${code}" ${state.outstandingFilterItem===code?'selected':''}>${code}</option>`).join('')}
+      </select>
+    </div>
     <div class="list-table" id="dash-outstanding"></div>
   `;
   const dp = document.getElementById('dash-projects');
@@ -736,8 +756,10 @@ function renderDashboard(main){
   }
   const dOut = document.getElementById('dash-outstanding');
   const top = outstanding.sort((a,b)=>b.urgent-a.urgent).slice(0,8);
-  dOut.innerHTML = top.length ? top.map(t=>outstandingRowHTML(t)).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding.</div>`;
+  dOut.innerHTML = top.length ? top.map(t=>outstandingRowHTML(t)).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding matching this filter.</div>`;
   attachOutstandingEvents(dOut);
+  document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
+  document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
 }
 function projectCardHTML(p){
   const prog = computeProgress(p);
@@ -802,50 +824,72 @@ function renderProjectsList(main){
 
 /* ---------- Outstanding tasks (full) — grouped by PO first ---------- */
 function renderOutstanding(main){
-  const groups = state.projects
+  const pmOptions = [...new Set(state.projects.map(p=>p.motormaxPM).filter(Boolean))];
+  const itemOptions = [...new Set(state.projects.flatMap(p=>(p.colors||[]).map(c=>c.mengyiCode)))];
+  let groups = state.projects
     .map(p=>({p, tasks:outstandingForProject(p)}))
     .filter(g=>g.tasks.length);
+  if(state.outstandingFilterPM) groups = groups.filter(g=>g.p.motormaxPM===state.outstandingFilterPM);
+  if(state.outstandingFilterItem) groups = groups.filter(g=>(g.p.colors||[]).some(c=>c.mengyiCode===state.outstandingFilterItem));
   groups.sort((a,b)=> (b.tasks.some(t=>t.urgent)?1:0) - (a.tasks.some(t=>t.urgent)?1:0));
-  main.innerHTML = `<div class="page-head"><h2>Outstanding Tasks</h2></div>` +
+  main.innerHTML = `
+    <div class="page-head"><h2>Outstanding Tasks</h2></div>
+    <div style="display:flex; gap:10px; margin-bottom:18px;">
+      <select id="filter-pm" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All PMs</option>
+        ${pmOptions.map(pm=>`<option value="${pm}" ${state.outstandingFilterPM===pm?'selected':''}>${pm}</option>`).join('')}
+      </select>
+      <select id="filter-item" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All items</option>
+        ${itemOptions.map(code=>`<option value="${code}" ${state.outstandingFilterItem===code?'selected':''}>${code}</option>`).join('')}
+      </select>
+    </div>
+    ` +
     (groups.length ? groups.map(({p,tasks})=>`
       <div class="section-title">${projectTitle(p)} <span class="chip">${currentPhaseLabel(p)}</span> <span class="chip">${p.colors&&p.colors.length?p.colors.length+' colour'+(p.colors.length>1?'s':''):''}</span></div>
       <div class="list-table" style="margin-bottom:18px;">${tasks.map(outstandingRowHTML).join('')}</div>
-    `).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding across any PO.</div>`);
+    `).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding matching this filter.</div>`);
   attachOutstandingEvents(main);
+  document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
+  document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
 }
 
-/* ---------- New Project form ---------- */
-function renderNewProjectForm(main){
+/* ---------- New / Edit Project form ---------- */
+function renderNewProjectForm(main, existing){
+  const isEdit = !!existing;
   main.innerHTML = `
-    <div class="page-head"><h2>New Project</h2></div>
+    <div class="page-head"><h2>${isEdit?'Edit Project':'New Project'}</h2></div>
     <div class="form-card">
       <div class="form-grid">
-        <div class="form-group"><label>PO Number</label><input id="f-po" placeholder="e.g. PO-2026-0417"></div>
-        <div class="form-group"><label>Model name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo"></div>
+        <div class="form-group"><label>PO Number</label><input id="f-po" placeholder="e.g. PO-2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
+        <div class="form-group"><label>Model name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${isEdit?(existing.modelName||''):''}"></div>
         <div class="form-group"><label>Scale</label>
-          <select id="f-scale"><option value="1:12">1:12</option><option value="1:18">1:18</option></select>
+          <select id="f-scale">
+            <option value="1:12" ${isEdit&&existing.scale==='1:12'?'selected':''}>1:12</option>
+            <option value="1:18" ${isEdit&&existing.scale==='1:18'?'selected':''}>1:18</option>
+          </select>
         </div>
-        <div class="form-group"><label>Norev product # (6-digit)</label><input id="f-norev" maxlength="6" placeholder="123456"></div>
-        <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="8493"></div>
-        <div class="form-group"><label>Motormax item #</label><input id="f-motormax" placeholder="assigned by Louisa"></div>
+        <div class="form-group"><label>Norev product # (6-digit)</label><input id="f-norev" maxlength="6" placeholder="123456" value="${isEdit?(existing.norevNumber||''):''}"></div>
+        <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="8493" value="${isEdit?(existing.mengyiBaseNumber||''):''}"></div>
+        <div class="form-group"><label>Motormax item #</label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
         <div class="form-group"><label>Motormax PM</label>
-          <select id="f-pm">${state.users.map(u=>`<option value="${u.name}">${u.name}</option>`).join('')}</select>
+          <select id="f-pm">${state.users.map(u=>`<option value="${u.name}" ${isEdit&&existing.motormaxPM===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
         </div>
-        <div class="form-group"><label>Order qty</label><input id="f-qty" type="number" placeholder="e.g. 3000"></div>
+        <div class="form-group"><label>Order qty</label><input id="f-qty" type="number" placeholder="e.g. 3000" value="${isEdit&&existing.qty?existing.qty:''}"></div>
         <div class="form-group">
           <label>Estimated ship — week number</label>
           <div style="display:flex;gap:8px;">
-            <input id="f-eta-week" type="number" min="1" max="53" placeholder="Wk (1-53)" style="width:50%;">
-            <input id="f-eta-year" type="number" placeholder="Year" value="${new Date().getFullYear()}" style="width:50%;">
+            <input id="f-eta-week" type="number" min="1" max="53" placeholder="Wk (1-53)" style="width:50%;" value="${isEdit&&existing.estShipWeekNum?existing.estShipWeekNum:''}">
+            <input id="f-eta-year" type="number" placeholder="Year" style="width:50%;" value="${isEdit&&existing.estShipYear?existing.estShipYear:new Date().getFullYear()}">
           </div>
           <div id="f-eta-preview" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
         </div>
         <div class="form-group full">
           <label>Special items</label>
           <div class="checkbox-row">
-            <label><input type="checkbox" id="f-chassis"> Chassis individually-numbered metal plate</label>
-            <label><input type="checkbox" id="f-booklet"> Printed booklet</label>
-            <label><input type="checkbox" id="f-holo"> Hologram sticker (customer-provided)</label>
+            <label><input type="checkbox" id="f-chassis" ${isEdit&&existing.specialItems&&existing.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
+            <label><input type="checkbox" id="f-booklet" ${isEdit&&existing.specialItems&&existing.specialItems.booklet?'checked':''}> Printed booklet</label>
+            <label><input type="checkbox" id="f-holo" ${isEdit&&existing.specialItems&&existing.specialItems.hologram?'checked':''}> Hologram sticker (customer-provided)</label>
           </div>
         </div>
         <div class="form-group full">
@@ -855,12 +899,14 @@ function renderNewProjectForm(main){
         </div>
       </div>
       <div style="margin-top:20px; display:flex; gap:10px;">
-        <button class="btn btn-primary" id="save-project"><i class="ti ti-device-floppy"></i> Create project</button>
+        <button class="btn btn-primary" id="save-project"><i class="ti ti-device-floppy"></i> ${isEdit?'Save changes':'Create project'}</button>
         <button class="btn" id="cancel-project">Cancel</button>
       </div>
     </div>
   `;
-  let colorRows = [{letter:'A', name:''}];
+  let colorRows = isEdit && existing.colors && existing.colors.length
+    ? existing.colors.map(c=>({letter:c.letter, name:c.name||'', _orig:c}))
+    : [{letter:'A', name:''}];
   const box = document.getElementById('color-inputs');
   function mengyiVal(){ return document.getElementById('f-mengyi').value || '####'; }
   function paintColorRows(){
@@ -914,19 +960,23 @@ function renderNewProjectForm(main){
       prev.textContent = `${monday.toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${sunday.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`;
     } else prev.textContent = '';
   }
+  updateEtaPreview();
   document.getElementById('f-eta-week').addEventListener('input', updateEtaPreview);
   document.getElementById('f-eta-year').addEventListener('input', updateEtaPreview);
-  document.getElementById('cancel-project').addEventListener('click', ()=>{ state.view='dashboard'; render(); });
+  document.getElementById('cancel-project').addEventListener('click', ()=>{ state.editingProjectId=null; state.view='dashboard'; render(); });
   document.getElementById('save-project').addEventListener('click', async ()=>{
+    if(isEdit && !requireEdit(existing)) return;
     const mengyiBase = document.getElementById('f-mengyi').value.trim();
     const colors = colorRows.filter(c=>c.letter).map(c=>({
-      letter:c.letter, name:c.name, mengyiCode:`N${c.letter}${mengyiBase}`, photoURL:''
+      photoURL:'', exportQty:null, domesticQty:null, toolingLog:[],
+      ...(c._orig||{}),
+      letter:c.letter, name:c.name, mengyiCode:`N${c.letter}${mengyiBase}`,
     }));
     const wk = Number(document.getElementById('f-eta-week').value)||null;
     const yr = Number(document.getElementById('f-eta-year').value)||null;
     let estShipDate = null;
     if(wk && yr){ estShipDate = isoWeekToDates(yr, wk).monday.toISOString().slice(0,10); }
-    const project = {
+    const fields = {
       poNumber: document.getElementById('f-po').value.trim(),
       modelName: document.getElementById('f-model').value.trim(),
       scale: document.getElementById('f-scale').value,
@@ -944,15 +994,17 @@ function renderNewProjectForm(main){
         hologram: document.getElementById('f-holo').checked,
       },
       colors,
-      packing: {},
-      tasks: {},
-      createdAt: Date.now(),
-      createdByName: state.currentUser.name,
-      createdByUserId: state.currentUser.id,
     };
-    if(!project.modelName){ alert('Please enter a model name.'); return; }
-    const ref = await db.collection('projects').add(project);
-    state.activeProjectId = ref.id; state.detailTab='workflow'; state.view='dashboard';
+    if(!fields.modelName){ alert('Please enter a model name.'); return; }
+    if(isEdit){
+      await db.collection('projects').doc(existing.id).update(fields);
+      state.editingProjectId = null;
+      state.activeProjectId = existing.id; state.detailTab='workflow'; state.view='dashboard';
+    } else {
+      const project = { ...fields, packing:{}, tasks:{}, createdAt:Date.now(), createdByName:state.currentUser.name, createdByUserId:state.currentUser.id };
+      const ref = await db.collection('projects').add(project);
+      state.activeProjectId = ref.id; state.detailTab='workflow'; state.view='dashboard';
+    }
     render();
   });
 }
@@ -967,7 +1019,7 @@ function renderProjectDetail(main){
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back</button>
       <h2 style="margin-left:10px;">${p.modelName}</h2>
-      ${!editable?`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${p.createdByName||'another PM'}</span>`:''}
+      ${editable?`<button class="btn btn-sm" id="edit-project-btn"><i class="ti ti-pencil"></i> Edit project</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${p.createdByName||'another PM'}</span>`}
     </div>
     <div class="detail-head">
       <div class="field-grid">
@@ -990,6 +1042,8 @@ function renderProjectDetail(main){
     <div id="tab-content"></div>
   `;
   document.getElementById('back-btn').addEventListener('click', ()=>{ state.activeProjectId=null; render(); });
+  const editBtn = document.getElementById('edit-project-btn');
+  if(editBtn) editBtn.addEventListener('click', ()=>{ state.editingProjectId = p.id; state.activeProjectId = null; state.view='new'; render(); });
   main.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{ state.detailTab=t.dataset.tab; renderProjectDetail(main); }));
   const tc = document.getElementById('tab-content');
   if(state.detailTab==='workflow') renderWorkflowTab(tc, p);
@@ -1026,7 +1080,8 @@ function taskRowHTML(p, t){
       <div style="flex:1;">
         <div class="task-text ${done?'done':''}">${t.text} ${urgent?'<span class="chip urgent">Due soon</span>':''}</div>
         <div class="task-meta">
-          ${done?`<span>✓ ${rec.doneBy||''} on ${rec.doneDate?new Date(rec.doneDate).toLocaleDateString():''}</span>`:''}
+          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?new Date(rec.doneDate).toLocaleDateString():'—')):'Not marked done'}</span>
+          <button data-action="setdonedate">${rec.doneDate?'Edit date':'Log date'}</button>
           ${t.rd?`<span>${rec.receivedDate?('Received '+new Date(rec.receivedDate).toLocaleDateString()):'No received date logged'}</span> <button data-action="setdate">Log date</button>`:''}
           ${t.sd?`<span>${rec.sentDate?('Sent '+new Date(rec.sentDate).toLocaleDateString()):'No sent date logged'}</span> <button data-action="setsentdate">Log sent date</button>`:''}
           ${t.rd?`<button data-action="note">${rec.note?'Edit note':'Add note (e.g. link to file)'}</button>`:''}
@@ -1048,6 +1103,17 @@ function attachTaskEvents(tc, p){
         [`tasks.${tid}.doneDate`]: newDone ? new Date().toISOString() : null,
       };
       await db.collection('projects').doc(p.id).update(update);
+    });
+    const doneDateBtn = row.querySelector('[data-action="setdonedate"]');
+    if(doneDateBtn) doneDateBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(p)) return;
+      const rec = (p.tasks && p.tasks[tid]) || {};
+      const val = prompt('Date for this task (YYYY-MM-DD):', (rec.doneDate||new Date().toISOString()).slice(0,10));
+      if(!val) return;
+      await db.collection('projects').doc(p.id).update({
+        [`tasks.${tid}.doneDate`]: val,
+        [`tasks.${tid}.doneBy`]: rec.doneBy || state.currentUser.name,
+      });
     });
     const dateBtn = row.querySelector('[data-action="setdate"]');
     if(dateBtn) dateBtn.addEventListener('click', async ()=>{
@@ -1077,9 +1143,13 @@ function attachTaskEvents(tc, p){
 function renderItemsTab(tc, p){
   const colors = p.colors || [];
   if(!colors.length){ tc.innerHTML = `<div class="empty-state"><i class="ti ti-palette"></i>No colours added to this project yet.</div>`; return; }
+  const totalExport = colors.reduce((s,c)=>s+(c.exportQty||0),0);
+  const totalDomestic = colors.reduce((s,c)=>s+(c.domesticQty||0),0);
   tc.innerHTML = `
     <div class="color-tabs">${colors.map(c=>`<div class="color-tab" data-letter="${c.letter}">${c.mengyiCode} ${c.name?('· '+c.name):''}</div>`).join('')}</div>
-    <p style="color:var(--ink-soft);font-size:13px;">Select a colour to open its item page (photo, product numbers, packing).</p>
+    <p style="color:var(--ink-soft);font-size:13px;">Select a colour to open its item page (product numbers, packing, tooling tracking, shipment split).</p>
+    ${(totalExport||totalDomestic)?`<div class="section-title" style="margin-top:16px;">PO shipment split (all colours)</div>
+    <p style="font-size:13px;"><span class="chip">Export: ${totalExport}</span> <span class="chip">Domestic: ${totalDomestic}</span></p>`:''}
   `;
   tc.querySelectorAll('.color-tab').forEach(el=>{
     el.addEventListener('click', ()=>{ state.activeColorLetter = el.dataset.letter; render(); });
@@ -1110,12 +1180,18 @@ function renderPackingTab(tc, p){
 }
 
 /* ---------- Item (colour) detail page ---------- */
+async function saveColorPatch(p, letter, patch){
+  const newColors = (p.colors||[]).map(c=>c.letter===letter?{...c, ...patch}:c);
+  await db.collection('projects').doc(p.id).update({ colors: newColors });
+}
 function renderItemDetail(main){
   const p = state.projects.find(x=>x.id===state.activeProjectId);
   if(!p){ state.activeProjectId=null; render(); return; }
   const color = (p.colors||[]).find(c=>c.letter===state.activeColorLetter);
   if(!color){ state.activeColorLetter=null; render(); return; }
   const pack = packingFor(p);
+  const editable = canEdit(p);
+  const toolingLog = color.toolingLog || [];
   main.innerHTML = `
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back to project</button>
@@ -1138,8 +1214,53 @@ function renderItemDetail(main){
     </div>
     <div class="section-title">Packaging structure</div>
     <p style="font-size:13px;color:var(--ink-soft);">Polyfoam box → closed/window box → 外箱 (${pack.pcsPerCarton??'?'} pcs) → 百寶箱${pack.cartonsPerMaster?(' ('+pack.cartonsPerMaster+' 外箱, '+pack.pcsPerMaster+' pcs total)'):''}.</p>
+
+    <div class="section-title" style="margin-top:22px;">Shipment split — export vs domestic</div>
+    <div class="phase-block" style="padding:14px 18px;">
+      <div style="display:flex; gap:16px; align-items:flex-end;">
+        <div class="form-group"><label>Export qty</label><input id="qty-export" type="number" value="${color.exportQty??''}" style="width:140px;" ${editable?'':'disabled'}></div>
+        <div class="form-group"><label>Domestic qty</label><input id="qty-domestic" type="number" value="${color.domesticQty??''}" style="width:140px;" ${editable?'':'disabled'}></div>
+        ${editable?`<button class="btn btn-sm" id="qty-save">Save</button>`:''}
+        ${p.qty?`<span class="chip">PO total: ${p.qty}</span>`:''}
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;">Tooling location tracking</div>
+    <div class="phase-block" style="padding:14px 18px;">
+      ${toolingLog.length?`
+        <table class="packing-table" style="margin-bottom:12px;">
+          <tr><th>Date</th><th>Direction</th><th>Location</th></tr>
+          ${toolingLog.slice().reverse().map(e=>`<tr><td class="mono">${e.date}</td><td>${e.direction}</td><td>${e.location}</td></tr>`).join('')}
+        </table>` : `<p style="font-size:13px;color:var(--ink-soft);margin-top:0;">No tooling movements logged yet.</p>`}
+      ${editable?`
+        <div style="display:flex; gap:10px; align-items:flex-end;">
+          <div class="form-group"><label>Date</label><input id="tool-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="form-group"><label>Direction</label>
+            <select id="tool-direction"><option value="IN">IN</option><option value="OUT">OUT</option></select>
+          </div>
+          <div class="form-group" style="flex:1;"><label>Location</label><input id="tool-location" placeholder="e.g. Factory A — Building 3"></div>
+          <button class="btn btn-sm" id="tool-add">Add entry</button>
+        </div>` : ''}
+    </div>
   `;
   document.getElementById('back-btn').addEventListener('click', ()=>{ state.activeColorLetter=null; render(); });
+  const qtySaveBtn = document.getElementById('qty-save');
+  if(qtySaveBtn) qtySaveBtn.addEventListener('click', async ()=>{
+    if(!requireEdit(p)) return;
+    const exportQty = Number(document.getElementById('qty-export').value)||null;
+    const domesticQty = Number(document.getElementById('qty-domestic').value)||null;
+    await saveColorPatch(p, color.letter, { exportQty, domesticQty });
+  });
+  const toolAddBtn = document.getElementById('tool-add');
+  if(toolAddBtn) toolAddBtn.addEventListener('click', async ()=>{
+    if(!requireEdit(p)) return;
+    const date = document.getElementById('tool-date').value;
+    const direction = document.getElementById('tool-direction').value;
+    const location = document.getElementById('tool-location').value.trim();
+    if(!date || !location){ alert('Please enter both a date and a location.'); return; }
+    const entry = { date, direction, location, loggedBy: state.currentUser.name };
+    await saveColorPatch(p, color.letter, { toolingLog: [...toolingLog, entry] });
+  });
 }
 </script>
 </body>
