@@ -310,9 +310,9 @@ input,select,textarea{font-family:inherit; font-size:14px;}
   <div class="sidebar">
     <div class="sb-brand"><div class="stamp">MM</div><span>Motormax</span></div>
     <div class="nav-item active" data-view="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
-    <div class="nav-item" data-view="projects"><i class="ti ti-list-details"></i> All POs</div>
+    <div class="nav-item" data-view="projects"><i class="ti ti-list-details"></i> All Items</div>
     <div class="nav-item" data-view="outstanding"><i class="ti ti-alert-circle"></i> Outstanding Tasks <span class="nav-badge" id="outstanding-count">0</span></div>
-    <div class="nav-item" data-view="new"><i class="ti ti-square-plus"></i> New PO</div>
+    <div class="nav-item" data-view="new"><i class="ti ti-square-plus"></i> New Item</div>
     <div class="sb-footer">
       <div class="sb-user"><div class="initials" id="sb-user-initials"></div><span id="sb-user-name"></span></div>
       <a class="sb-link" id="change-pin-link">Change PIN</a>
@@ -730,7 +730,7 @@ function renderDashboard(main){
     const po = state.pos.find(x=>x.id===t.poId); return po && po.poNumber===state.outstandingFilterPONum;
   });
   main.innerHTML = `
-    <div class="page-head"><h2>Dashboard</h2></div>
+    <div class="page-head"><h2>Dashboard</h2> <button class="btn btn-sm btn-ghost" id="import-legacy-btn" style="margin-left:auto;"><i class="ti ti-database-import"></i> Import legacy project data</button></div>
     <div class="stat-row">
       <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total POs</div></div>
       <div class="stat-card"><div class="num">${inSampling}</div><div class="lbl">In deco sampling</div></div>
@@ -758,7 +758,7 @@ function renderDashboard(main){
   `;
   const dp = document.getElementById('dash-pos');
   if(!state.pos.length){
-    dp.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No POs yet. Create one from "New PO".</div>`;
+    dp.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No items yet. Create one from "New Item".</div>`;
   } else {
     dp.innerHTML = state.pos.slice(0,6).map(po=>poCardHTML(po)).join('');
     attachPoCardEvents(dp);
@@ -770,6 +770,81 @@ function renderDashboard(main){
   document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
   document.getElementById('filter-ponum').addEventListener('change', (e)=>{ state.outstandingFilterPONum = e.target.value; render(); });
+  document.getElementById('import-legacy-btn').addEventListener('click', importLegacyProjects);
+}
+
+/* ============================================================
+   ONE-TIME RECOVERY: pulls data from the old "projects" collection
+   (used before the Model/PO split) into the new "models" + "pos"
+   structure. Safe to run once; running it twice on the same legacy
+   docs will create duplicates — check your data before re-running.
+   TOOLING_TASKS id mapping: old t3_3/t3_4/t3_5 → new tool_1/2/3.
+   ============================================================ */
+async function importLegacyProjects(){
+  if(!confirm('This will look for data in the old "projects" Firestore collection and copy it into the new structure. Continue?')) return;
+  const snap = await db.collection('projects').get();
+  if(snap.empty){ alert('No legacy data found in the old "projects" collection — nothing to import.'); return; }
+  const oldToolingMap = { t3_3:'tool_1', t3_4:'tool_2', t3_5:'tool_3' };
+  let modelsCreated = 0, posCreated = 0;
+  for(const doc of snap.docs){
+    const data = doc.data();
+    const base = data.mengyiBaseNumber;
+    if(!base) continue;
+    let modelId;
+    const existingSnap = await db.collection('models').where('mengyiBaseNumber','==',base).get();
+    if(!existingSnap.empty){
+      modelId = existingSnap.docs[0].id;
+    } else {
+      const toolingTasks = {};
+      Object.entries(oldToolingMap).forEach(([oldId,newId])=>{
+        if(data.tasks && data.tasks[oldId]) toolingTasks[newId] = data.tasks[oldId];
+      });
+      const combinedToolingLog = (data.colors||[]).flatMap(c=>c.toolingLog||[]);
+      const modelRef = await db.collection('models').add({
+        mengyiBaseNumber: base,
+        modelName: data.modelName || `Model ${base}`,
+        scale: data.scale || '1:12',
+        specialItems: data.specialItems || {},
+        packing: data.packing || {},
+        toolingTasks,
+        toolingLog: combinedToolingLog,
+        createdByUserId: data.createdByUserId || state.currentUser.id,
+        createdByName: data.createdByName || state.currentUser.name,
+        createdAt: data.createdAt || Date.now(),
+      });
+      modelId = modelRef.id;
+      modelsCreated++;
+    }
+    const poTasks = {};
+    Object.entries(data.tasks||{}).forEach(([tid,val])=>{
+      if(!oldToolingMap[tid]) poTasks[tid] = val;
+    });
+    for(const color of (data.colors||[])){
+      await db.collection('pos').add({
+        modelId,
+        mengyiBaseNumber: base,
+        colorLetter: color.letter,
+        colorName: color.name||'',
+        mengyiCode: color.mengyiCode || `N${color.letter}${base}`,
+        poNumber: data.poNumber || '',
+        norevNumber: data.norevNumber || '',
+        motormaxItemNumber: data.motormaxItemNumber || '',
+        motormaxPM: data.motormaxPM || '',
+        qty: data.qty || null,
+        exportQty: color.exportQty ?? null,
+        domesticQty: color.domesticQty ?? null,
+        estShipWeekNum: data.estShipWeekNum || null,
+        estShipYear: data.estShipYear || null,
+        estShipDate: data.estShipDate || null,
+        tasks: poTasks,
+        createdByUserId: data.createdByUserId || state.currentUser.id,
+        createdByName: data.createdByName || state.currentUser.name,
+        createdAt: data.createdAt || Date.now(),
+      });
+      posCreated++;
+    }
+  }
+  alert(`Import complete: ${modelsCreated} model(s) and ${posCreated} item(s) created. Please review them, then you can delete the old "projects" collection from the Firebase Console once you've confirmed everything looks right.`);
 }
 function poCardHTML(po){
   const model = modelFor(po);
@@ -818,15 +893,15 @@ function attachOutstandingEvents(container){
   });
 }
 
-/* ---------- All POs list ---------- */
+/* ---------- All Items list ---------- */
 function renderPosList(main){
   main.innerHTML = `
-    <div class="page-head"><h2>All POs</h2></div>
+    <div class="page-head"><h2>All Items</h2></div>
     <div id="po-list"></div>
   `;
   const list = document.getElementById('po-list');
   if(!state.pos.length){
-    list.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No POs yet.</div>`;
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No items yet.</div>`;
     return;
   }
   // Group by PO Number so colours bundled under the same PO show together,
@@ -901,7 +976,7 @@ function renderPoForm(main, existing){
   const isEdit = !!existing;
   const existingModel = isEdit ? modelFor(existing) : null;
   main.innerHTML = `
-    <div class="page-head"><h2>${isEdit?'Edit PO':'New PO'}</h2></div>
+    <div class="page-head"><h2>${isEdit?'Edit Item':'New Item'}</h2></div>
     <div class="form-card">
       <div class="form-grid">
         <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
@@ -1073,7 +1148,7 @@ function renderPoDetail(main){
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back</button>
       <h2 style="margin-left:10px;">${po.mengyiCode} ${po.colorName?('— '+po.colorName):''}</h2>
-      ${editable?`<button class="btn btn-sm" id="edit-po-btn"><i class="ti ti-pencil"></i> Edit PO</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${po.createdByName||'another PM'}</span>`}
+      ${editable?`<button class="btn btn-sm" id="edit-po-btn"><i class="ti ti-pencil"></i> Edit item</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${po.createdByName||'another PM'}</span>`}
     </div>
     <div class="detail-head">
       <div class="field-grid">
