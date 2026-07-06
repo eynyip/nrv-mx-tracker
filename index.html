@@ -73,10 +73,16 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 /* ---------- Login ---------- */
 #login-screen{
   min-height:100vh; display:flex; align-items:center; justify-content:center;
-  background:
-    radial-gradient(circle at 20% 15%, rgba(61,90,128,.10), transparent 55%),
-    radial-gradient(circle at 85% 85%, rgba(201,122,44,.08), transparent 50%),
-    linear-gradient(160deg, #EDEFEA 0%, var(--paper) 60%);
+  background-color:var(--paper);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%231B2430' fill-opacity='0.10' d='M0,300 C220,220 380,270 620,240 C860,210 980,260 1200,230 C1320,215 1400,230 1440,225 L1440,320 L0,320 Z'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%233D5A80' fill-opacity='0.14' d='M0,320 C200,240 340,285 560,255 C820,220 1000,270 1220,240 C1320,226 1380,236 1440,232 L1440,320 Z'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23EAF0F6' fill-opacity='0.9' d='M0,320 C260,270 420,300 680,278 C900,260 1060,295 1300,270 C1360,264 1400,268 1440,266 L1440,320 Z'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 78% 18%, rgba(201,122,44,.35) 0%, rgba(201,122,44,.10) 32%, transparent 55%),
+    linear-gradient(160deg, #EDEFEA 0%, var(--paper) 55%);
+  background-repeat:no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position:bottom, bottom, bottom, center, center;
+  background-size:100% 55%, 100% 42%, 100% 30%, cover, cover;
 }
 .login-card{
   background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius);
