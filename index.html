@@ -398,35 +398,34 @@ const WORKFLOW = [
     { id:'t1_3', text:'Add Chinese translation to deco list' },
     { id:'t1_4', text:'Send deco list + Chinese translation to factory' },
     { id:'t1_5', text:'MengYi arranges test shots / samples delivery to factory', rd:true },
-    { id:'t1_6', text:'Factory confirms cost calculation received (unit cost + polyfoam tooling + deco tooling investment)' },
   ]},
   { id:'ph2', label:'Phase 2 — Quotation', tasks:[
     { id:'t2_1', text:'Prepare FOB Yantian unit cost, polyfoam tooling cost, deco tooling cost' },
-    { id:'t2_2', text:'Send quotation to Norev PM', sd:true },
+    { id:'t2_2', text:'Send quotation to Norev PM (may take several rounds)', rounds:true },
     { id:'t2_3', text:'Customer accepts quotation', rd:true },
   ]},
-  { id:'ph4', label:'Phase 4 — Deco sampling', tasks:[
+  { id:'ph3', label:'Phase 3 — Deco sampling', tasks:[
     { id:'t4_1', text:'Factory prepares deco samples (2 pcs per colour)' },
-    { id:'t4_2', text:'Deco samples sent to Norev / MengYi for review', sd:true },
+    { id:'t4_2', text:'Deco samples sent to Norev / MengYi for review', sd:true, courier:true },
     { id:'t4_3', text:'Customer deco sample comments received', rd:true },
     { id:'t4_4', text:'Revised samples produced (if required)' },
     { id:'t4_5', text:'Deco samples approved by customer', rd:true },
   ]},
-  { id:'ph5', label:'Phase 5 — PO & pre-production', tasks:[
+  { id:'ph4', label:'Phase 4 — PO & pre-production', tasks:[
     { id:'t5_1', text:'Purchase Order received from Norev', rd:true },
+    { id:'t5_8', text:'PPQC document received from Norev (for production reference — no approval needed)', rd:true },
     { id:'t5_2', text:'Proforma Invoice prepared (50% deposit / 30% post-ship / 20% post-arrival)' },
     { id:'t5_3', text:'50% deposit payment received from Vincci Chan (Norev HK GM)', rd:true },
     { id:'t5_4', text:'Issue Sales Note + Contract to factory (include +8 extra samples)' },
     { id:'t5_5', text:'Pre-production sample (PPS) produced by factory' },
     { id:'t5_6', text:'PPS sent for customer approval', sd:true },
     { id:'t5_7', text:'PPS approved by customer', rd:true },
-    { id:'t5_8', text:'PPQC document received from Norev (for production reference — no approval needed)', rd:true },
   ]},
-  { id:'ph6', label:'Phase 6 — Packaging & pre-shipment', tasks:[
+  { id:'ph5', label:'Phase 5 — Packaging & pre-shipment', tasks:[
     { id:'t6_1', text:'Packaging artwork files received from customer', rd:true },
     { id:'t6_2', text:'Booklet artwork files received from customer', rd:true, onlyIf:'booklet' },
-    { id:'t6_3', text:'Send packaging files to factory for packaging samples (2 pcs)' },
-    { id:'t6_4', text:'Send booklet files to factory for booklet samples (5 pcs)', onlyIf:'booklet' },
+    { id:'t6_3', text:'Send packaging files to Norev for packaging samples (2 pcs)', sd:true, courier:true },
+    { id:'t6_4', text:'Send booklet files to Norev for booklet samples (5 pcs)', onlyIf:'booklet', sd:true, courier:true },
     { id:'t6_5', text:'Packaging samples approved' },
     { id:'t6_6', text:'Booklet samples approved', onlyIf:'booklet' },
     { id:'t6_7', text:'Shipping marks prepared and confirmed with factory' },
@@ -434,7 +433,7 @@ const WORKFLOW = [
     { id:'t6_9', text:'Hologram stickers received at factory', rd:true, onlyIf:'hologram' },
     { id:'t6_10', text:'Chassis plate numbering confirmed with factory', onlyIf:'chassisPlate' },
   ]},
-  { id:'ph7', label:'Phase 7 — QC, shipment & payment', tasks:[
+  { id:'ph6', label:'Phase 6 — QC, shipment & payment', tasks:[
     { id:'t7_1', text:'MengYi QC team conducts goods inspection at factory' },
     { id:'t7_2', text:'MengYi QC issues "OK to Ship" email to Norev PM', rd:true },
     { id:'t7_3', text:'Export shipment arranged to France' },
@@ -463,13 +462,33 @@ function isoWeekToDates(year, week){
 function formatShipWeek(po){
   if(!po.estShipYear || !po.estShipWeekNum) return '—';
   const { monday, sunday } = isoWeekToDates(po.estShipYear, po.estShipWeekNum);
-  const fmt = d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  const fmt = d=>fmtDate(d.toISOString());
   return `Wk ${po.estShipWeekNum}/${po.estShipYear} (${fmt(monday)}–${fmt(sunday)})`;
 }
 function daysUntil(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr); const now = new Date();
   return Math.ceil((d - now)/(1000*60*60*24));
+}
+
+/* ============================================================
+   DATE FORMATTING — every date shown in the platform displays as
+   YYYY/MM/DD. Dates are still STORED internally as YYYY-MM-DD (or
+   full ISO timestamps) for reliable sorting/parsing; only the
+   display and prompt-entry format changes.
+   ============================================================ */
+function fmtDate(d){
+  if(!d) return '';
+  const s = String(d).slice(0,10);
+  return s.replace(/-/g,'/');
+}
+function promptDate(label, currentIso){
+  const defaultVal = fmtDate(currentIso || new Date().toISOString());
+  const val = prompt(`${label} (YYYY/MM/DD):`, defaultVal);
+  if(!val) return null;
+  const normalized = val.trim().replace(/\//g,'-');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(normalized)){ alert('Please enter a date as YYYY/MM/DD.'); return null; }
+  return normalized;
 }
 
 /* ============================================================
@@ -1008,6 +1027,11 @@ function renderPoForm(main, existing){
         <div class="form-group"><label>Motormax PM</label>
           <select id="f-pm">${state.users.map(u=>`<option value="${u.name}" ${isEdit&&existing.motormaxPM===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
         </div>
+        <div class="form-group"><label>Norev PM</label>
+          <select id="f-norev-pm">
+            ${['Patrice','Ben','Sascha'].map(n=>`<option value="${n}" ${isEdit&&existing.norevPM===n?'selected':''}>${n}</option>`).join('')}
+          </select>
+        </div>
         <div class="form-group"><label>Order qty</label><input id="f-qty" type="number" placeholder="e.g. 3000" value="${isEdit&&existing.qty?existing.qty:''}"></div>
         <div class="form-group"><label>Export qty</label><input id="f-export" type="number" value="${isEdit&&existing.exportQty!=null?existing.exportQty:''}"></div>
         <div class="form-group"><label>Domestic qty</label><input id="f-domestic" type="number" value="${isEdit&&existing.domesticQty!=null?existing.domesticQty:''}"></div>
@@ -1061,7 +1085,7 @@ function renderPoForm(main, existing){
     const prev = document.getElementById('f-eta-preview');
     if(wk>=1 && wk<=53 && yr){
       const { monday, sunday } = isoWeekToDates(yr, wk);
-      prev.textContent = `${monday.toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${sunday.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`;
+      prev.textContent = `${fmtDate(monday.toISOString())} – ${fmtDate(sunday.toISOString())}`;
     } else prev.textContent = '';
   }
   updateEtaPreview();
@@ -1117,6 +1141,7 @@ function renderPoForm(main, existing){
       norevNumber: document.getElementById('f-norev').value.trim(),
       motormaxItemNumber: document.getElementById('f-motormax').value.trim(),
       motormaxPM: document.getElementById('f-pm').value,
+      norevPM: document.getElementById('f-norev-pm').value,
       qty: Number(document.getElementById('f-qty').value)||null,
       exportQty: Number(document.getElementById('f-export').value)||null,
       domesticQty: Number(document.getElementById('f-domestic').value)||null,
@@ -1158,6 +1183,7 @@ function renderPoDetail(main){
         <div><div class="field-label">Motormax item #</div><div class="field-val">${po.motormaxItemNumber||'—'}</div></div>
         <div><div class="field-label">Scale</div><div class="field-val">${model?model.scale:'—'}</div></div>
         <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.motormaxPM||'—'}</div></div>
+        <div><div class="field-label">Norev PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.norevPM||'—'}</div></div>
         <div><div class="field-label">Order qty</div><div class="field-val">${po.qty||'—'} <span style="font-size:11px;color:var(--ink-soft);">(Exp ${po.exportQty??'—'} / Dom ${po.domesticQty??'—'})</span></div></div>
         <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(po)}</div></div>
         <div><div class="field-label">Progress</div><div class="field-val">${prog}%</div></div>
@@ -1204,19 +1230,25 @@ function taskRowHTML(po, t){
   const rec = (po.tasks && po.tasks[t.id]) || {};
   const done = !!rec.done;
   const urgent = t.urgent && po.estShipDate && !done && daysUntil(po.estShipDate)<=30;
+  const rounds = rec.quotationRounds || [];
   return `
     <div class="task-row" data-tid="${t.id}">
       <div class="task-check ${done?'done':''}" data-action="toggle">${done?'<i class="ti ti-check" style="font-size:13px;"></i>':''}</div>
       <div style="flex:1;">
         <div class="task-text ${done?'done':''}">${t.text} ${urgent?'<span class="chip urgent">Due soon</span>':''}</div>
         <div class="task-meta">
-          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?new Date(rec.doneDate).toLocaleDateString():'—')):'Not marked done'}</span>
+          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?fmtDate(rec.doneDate):'—')):'Not marked done'}</span>
           <button data-action="setdonedate">${rec.doneDate?'Edit date':'Log date'}</button>
-          ${t.rd?`<span>${rec.receivedDate?('Received '+new Date(rec.receivedDate).toLocaleDateString()):'No received date logged'}</span> <button data-action="setdate">Log date</button>`:''}
-          ${t.sd?`<span>${rec.sentDate?('Sent '+new Date(rec.sentDate).toLocaleDateString()):'No sent date logged'}</span> <button data-action="setsentdate">Log sent date</button>`:''}
+          ${t.rd?`<span>${rec.receivedDate?('Received '+fmtDate(rec.receivedDate)):'No received date logged'}</span> <button data-action="setdate">Log date</button>`:''}
+          ${t.sd?`<span>${rec.sentDate?('Sent '+fmtDate(rec.sentDate)):'No sent date logged'}</span> <button data-action="setsentdate">Log sent date</button>`:''}
+          ${t.courier?`<span>${rec.trackingNumber?('Tracking # '+rec.trackingNumber):'No tracking # yet'}</span> <button data-action="settracking">${rec.trackingNumber?'Edit tracking #':'Add tracking #'}</button>`:''}
           ${t.rd?`<button data-action="note">${rec.note?'Edit note':'Add note (e.g. link to file)'}</button>`:''}
           ${rec.note?`<span class="chip">${rec.note}</span>`:''}
         </div>
+        ${t.rounds?`<div class="task-meta">
+          <button data-action="addround">Log a quotation round</button>
+          ${rounds.map((r,i)=>`<span class="chip">Round ${i+1}: ${fmtDate(r.date)}</span>`).join(' ')}
+        </div>`:''}
       </div>
     </div>`;
 }
@@ -1238,7 +1270,7 @@ function attachTaskEvents(tc, po){
     if(doneDateBtn) doneDateBtn.addEventListener('click', async ()=>{
       if(!requireEdit(po)) return;
       const rec = (po.tasks && po.tasks[tid]) || {};
-      const val = prompt('Date for this task (YYYY-MM-DD):', (rec.doneDate||new Date().toISOString()).slice(0,10));
+      const val = promptDate('Date for this task', rec.doneDate);
       if(!val) return;
       await db.collection('pos').doc(po.id).update({
         [`tasks.${tid}.doneDate`]: val,
@@ -1248,16 +1280,33 @@ function attachTaskEvents(tc, po){
     const dateBtn = row.querySelector('[data-action="setdate"]');
     if(dateBtn) dateBtn.addEventListener('click', async ()=>{
       if(!requireEdit(po)) return;
-      const val = prompt('Received date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+      const val = promptDate('Received date', null);
       if(!val) return;
       await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.receivedDate`]: val });
     });
     const sentBtn = row.querySelector('[data-action="setsentdate"]');
     if(sentBtn) sentBtn.addEventListener('click', async ()=>{
       if(!requireEdit(po)) return;
-      const val = prompt('Sent date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+      const val = promptDate('Sent date', null);
       if(!val) return;
       await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.sentDate`]: val });
+    });
+    const trackBtn = row.querySelector('[data-action="settracking"]');
+    if(trackBtn) trackBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(po)) return;
+      const rec = (po.tasks && po.tasks[tid]) || {};
+      const val = prompt('Courier tracking #:', rec.trackingNumber||'');
+      if(val===null) return;
+      await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.trackingNumber`]: val });
+    });
+    const roundBtn = row.querySelector('[data-action="addround"]');
+    if(roundBtn) roundBtn.addEventListener('click', async ()=>{
+      if(!requireEdit(po)) return;
+      const val = promptDate('Date this quotation round was sent', null);
+      if(!val) return;
+      const rec = (po.tasks && po.tasks[tid]) || {};
+      const rounds = rec.quotationRounds || [];
+      await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.quotationRounds`]: [...rounds, { date: val }] });
     });
     const noteBtn = row.querySelector('[data-action="note"]');
     if(noteBtn) noteBtn.addEventListener('click', async ()=>{
@@ -1290,16 +1339,18 @@ function renderToolingTab(tc, po, model){
     <div class="phase-block" style="padding:14px 18px;">
       ${toolingLog.length?`
         <table class="packing-table" style="margin-bottom:12px;">
-          <tr><th>Date</th><th>Direction</th><th>Location</th></tr>
-          ${toolingLog.slice().reverse().map(e=>`<tr><td class="mono">${e.date}</td><td>${e.direction}</td><td>${e.location}</td></tr>`).join('')}
+          <tr><th>Date</th><th>Direction</th><th>From</th><th>To</th><th>Remarks</th></tr>
+          ${toolingLog.slice().reverse().map(e=>`<tr><td class="mono">${fmtDate(e.date)}</td><td>${e.direction}</td><td>${e.fromLocation||''}</td><td>${e.toLocation||''}</td><td>${e.remarks||''}</td></tr>`).join('')}
         </table>` : `<p style="font-size:13px;color:var(--ink-soft);margin-top:0;">No tooling movements logged yet.</p>`}
       ${editable?`
-        <div style="display:flex; gap:10px; align-items:flex-end;">
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
           <div class="form-group"><label>Date</label><input id="tool-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
           <div class="form-group"><label>Direction</label>
-            <select id="tool-direction"><option value="IN">IN</option><option value="OUT">OUT</option></select>
+            <select id="tool-direction"><option value="IN">IN</option><option value="OUT">OUT</option><option value="INTERNAL">INTERNAL</option></select>
           </div>
-          <div class="form-group" style="flex:1;"><label>Location</label><input id="tool-location" placeholder="e.g. Factory A — Building 3"></div>
+          <div class="form-group"><label>From location</label><input id="tool-from" placeholder="e.g. Factory A — Building 3"></div>
+          <div class="form-group"><label>To location</label><input id="tool-to" placeholder="e.g. Factory B — Warehouse"></div>
+          <div class="form-group" style="flex:1;"><label>Remarks</label><input id="tool-remarks" placeholder="optional"></div>
           <button class="btn btn-sm" id="tool-add">Add entry</button>
         </div>` : ''}
     </div>
@@ -1340,7 +1391,7 @@ function renderToolingTab(tc, po, model){
   tc.querySelectorAll('[data-action="tooling-setdate"]').forEach(el=>{
     el.addEventListener('click', async ()=>{
       const tid = el.closest('.task-row').dataset.tid;
-      const val = prompt('Received date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+      const val = promptDate('Received date', null);
       if(!val) return;
       await db.collection('models').doc(model.id).update({ [`toolingTasks.${tid}.receivedDate`]: val });
     });
@@ -1349,9 +1400,11 @@ function renderToolingTab(tc, po, model){
   if(toolAddBtn) toolAddBtn.addEventListener('click', async ()=>{
     const date = document.getElementById('tool-date').value;
     const direction = document.getElementById('tool-direction').value;
-    const location = document.getElementById('tool-location').value.trim();
-    if(!date || !location){ alert('Please enter both a date and a location.'); return; }
-    const entry = { date, direction, location, loggedBy: state.currentUser.name };
+    const fromLocation = document.getElementById('tool-from').value.trim();
+    const toLocation = document.getElementById('tool-to').value.trim();
+    const remarks = document.getElementById('tool-remarks').value.trim();
+    if(!date || !fromLocation || !toLocation){ alert('Please enter a date, a from-location, and a to-location.'); return; }
+    const entry = { date, direction, fromLocation, toLocation, remarks, loggedBy: state.currentUser.name };
     await db.collection('models').doc(model.id).update({ toolingLog: [...toolingLog, entry] });
   });
   const modelSaveBtn = document.getElementById('model-save');
@@ -1376,8 +1429,8 @@ function toolingTaskRowHTML(model, t){
       <div style="flex:1;">
         <div class="task-text ${done?'done':''}">${t.text}</div>
         <div class="task-meta">
-          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?new Date(rec.doneDate).toLocaleDateString():'—')):'Not marked done'}</span>
-          ${t.rd?`<span>${rec.receivedDate?('Received '+new Date(rec.receivedDate).toLocaleDateString()):'No received date logged'}</span> <button data-action="tooling-setdate">Log date</button>`:''}
+          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?fmtDate(rec.doneDate):'—')):'Not marked done'}</span>
+          ${t.rd?`<span>${rec.receivedDate?('Received '+fmtDate(rec.receivedDate)):'No received date logged'}</span> <button data-action="tooling-setdate">Log date</button>`:''}
         </div>
       </div>
     </div>`;
