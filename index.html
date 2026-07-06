@@ -310,9 +310,9 @@ input,select,textarea{font-family:inherit; font-size:14px;}
   <div class="sidebar">
     <div class="sb-brand"><div class="stamp">MM</div><span>Motormax</span></div>
     <div class="nav-item active" data-view="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
-    <div class="nav-item" data-view="projects"><i class="ti ti-list-details"></i> All Projects</div>
+    <div class="nav-item" data-view="projects"><i class="ti ti-list-details"></i> All POs</div>
     <div class="nav-item" data-view="outstanding"><i class="ti ti-alert-circle"></i> Outstanding Tasks <span class="nav-badge" id="outstanding-count">0</span></div>
-    <div class="nav-item" data-view="new"><i class="ti ti-square-plus"></i> New Project</div>
+    <div class="nav-item" data-view="new"><i class="ti ti-square-plus"></i> New PO</div>
     <div class="sb-footer">
       <div class="sb-user"><div class="initials" id="sb-user-initials"></div><span id="sb-user-name"></span></div>
       <a class="sb-link" id="change-pin-link">Change PIN</a>
@@ -358,8 +358,6 @@ const auth = firebase.auth();
    security boundary enforced by your Firestore rules. The
    4-digit PIN in the app UI is a friendly local check on top
    of this, mainly useful on a shared computer.
-   Replace both the emails and passwords below with the real
-   ones you set up in the Firebase console (step 3 above).
    ============================================================ */
 const AUTH_CREDENTIALS = {
   ey:      { email:'elizabethyip@redboxtoy.com', password:'7t%3NtfnCdQO*oW1' },
@@ -368,7 +366,7 @@ const AUTH_CREDENTIALS = {
 };
 
 /* ============================================================
-   STATIC DATA: users, workflow, packing defaults
+   STATIC DATA
    ============================================================ */
 const DEFAULT_USERS = [
   { id:'ey', name:'EY', pin:'0000' },
@@ -381,7 +379,18 @@ const PACKING_DEFAULTS = {
   '1:18': { pcsPerCarton:6, cartonsPerMaster:null },
 };
 
-// onlyIf: 'chassisPlate' | 'booklet' | 'hologram' — task only shown if that special item is flagged true
+/* TOOLING TASKS — shared across every PO/colour of the same base
+   MengYi number, since they use the same physical tooling. Tracked
+   on the MODEL document, not the PO. */
+const TOOLING_TASKS = [
+  { id:'tool_1', text:'Confirm tooling status with Norev / tooling vendor' },
+  { id:'tool_2', text:'Tooling ready for transfer to factory' },
+  { id:'tool_3', text:'Tooling received at factory', rd:true },
+];
+
+/* PO WORKFLOW — everything else, tracked independently per PO
+   (per colour). onlyIf: 'chassisPlate' | 'booklet' | 'hologram'
+   refers to the linked model's specialItems. */
 const WORKFLOW = [
   { id:'ph1', label:'Phase 1 — Deco list & cost preparation', tasks:[
     { id:'t1_1', text:'Deco list received from customer', rd:true },
@@ -395,11 +404,6 @@ const WORKFLOW = [
     { id:'t2_1', text:'Prepare FOB Yantian unit cost, polyfoam tooling cost, deco tooling cost' },
     { id:'t2_2', text:'Send quotation to Norev PM', sd:true },
     { id:'t2_3', text:'Customer accepts quotation', rd:true },
-  ]},
-  { id:'ph3', label:'Phase 3 — Tooling transfer', tasks:[
-    { id:'t3_3', text:'Confirm tooling status with Norev / tooling vendor' },
-    { id:'t3_4', text:'Tooling ready for transfer to factory' },
-    { id:'t3_5', text:'Tooling received at factory', rd:true },
   ]},
   { id:'ph4', label:'Phase 4 — Deco sampling', tasks:[
     { id:'t4_1', text:'Factory prepares deco samples (2 pcs per colour)' },
@@ -441,15 +445,9 @@ const WORKFLOW = [
     { id:'t7_8', text:'Final 20% payment received', rd:true },
   ]},
 ];
-function allTaskIds(){ return WORKFLOW.flatMap(p=>p.tasks.map(t=>t.id)); }
-function taskDef(id){ for(const p of WORKFLOW) for(const t of p.tasks) if(t.id===id) return t; return null; }
-function phaseOfTask(id){ return WORKFLOW.find(p=>p.tasks.some(t=>t.id===id)); }
 
 /* ============================================================
    WEEK-NUMBER SHIP DATE — ISO 8601 (Monday-start) week calc.
-   Given a year + week number, returns the Monday and Sunday of
-   that week. estShipDate stored internally is the Monday, in
-   YYYY-MM-DD form, so existing "days until" logic keeps working.
    ============================================================ */
 function isoWeekToDates(year, week){
   const jan4 = new Date(Date.UTC(year,0,4));
@@ -462,29 +460,36 @@ function isoWeekToDates(year, week){
   sunday.setUTCDate(monday.getUTCDate()+6);
   return { monday, sunday };
 }
-function formatShipWeek(p){
-  if(!p.estShipYear || !p.estShipWeekNum) return '—';
-  const { monday, sunday } = isoWeekToDates(p.estShipYear, p.estShipWeekNum);
+function formatShipWeek(po){
+  if(!po.estShipYear || !po.estShipWeekNum) return '—';
+  const { monday, sunday } = isoWeekToDates(po.estShipYear, po.estShipWeekNum);
   const fmt = d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
-  return `Wk ${p.estShipWeekNum}/${p.estShipYear} (${fmt(monday)}–${fmt(sunday)})`;
+  return `Wk ${po.estShipWeekNum}/${po.estShipYear} (${fmt(monday)}–${fmt(sunday)})`;
+}
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr); const now = new Date();
+  return Math.ceil((d - now)/(1000*60*60*24));
 }
 
 /* ============================================================
-   PERMISSIONS — EY is master admin (full read/write on every
-   project). Everyone else can only edit projects they created
-   themselves. This is a client-side check for now; true
-   server-side enforcement would need matching Firestore rules.
+   PERMISSIONS
+   - PO-specific fields: EY (master admin) or the PO's creator.
+   - Model / tooling fields: shared infrastructure — any signed-in
+     PM can update, since colours of the same base number share
+     one physical tooling set.
    ============================================================ */
-function canEdit(p){
+function canEdit(po){
   if(!state.currentUser) return false;
   if(state.currentUser.id === 'ey') return true;
-  return p.createdByUserId === state.currentUser.id;
+  return po.createdByUserId === state.currentUser.id;
 }
-function requireEdit(p){
-  if(canEdit(p)) return true;
-  alert(`Only EY or ${p.createdByName||'the person who created this project'} can make changes to this project.`);
+function requireEdit(po){
+  if(canEdit(po)) return true;
+  alert(`Only EY or ${po.createdByName||'the person who created this PO'} can make changes to this PO.`);
   return false;
 }
+function canEditModel(){ return !!state.currentUser; } // any signed-in PM — tooling is shared
 
 /* ============================================================
    STATE
@@ -492,24 +497,20 @@ function requireEdit(p){
 let state = {
   currentUser: null,
   users: [],
-  projects: [],
+  models: [],
+  pos: [],
   view: 'dashboard',
-  activeProjectId: null,
-  activeColorLetter: null,
+  activePoId: null,
   detailTab: 'workflow',
   loginSelectedUser: null,
   pinBuffer: '',
-  editingProjectId: null,
+  editingPoId: null,
   outstandingFilterPM: '',
   outstandingFilterItem: '',
 };
 
 /* ============================================================
    BOOTSTRAP: render login tiles from the local user list.
-   (We no longer read Firestore here — with locked-down rules,
-   only an authenticated request can read anything. Each user's
-   PIN doc is fetched only after they've signed into their own
-   Firebase Auth account in attemptLogin() below.)
    ============================================================ */
 state.users = DEFAULT_USERS.map(u=>({id:u.id, name:u.name}));
 renderLoginUsers();
@@ -577,11 +578,9 @@ async function attemptLogin(){
     state.pinBuffer = ''; renderPinRow();
     return;
   }
-  // Now authenticated as this PM's Firebase account — safe to read/write their PIN doc.
   const docRef = db.collection('users').doc(u.id);
   let snap = await docRef.get();
   if(!snap.exists){
-    // First-ever login for this account: seed a default PIN of 0000.
     await docRef.set({ name:u.name, pin:'0000' });
     snap = await docRef.get();
   }
@@ -592,7 +591,7 @@ async function attemptLogin(){
     document.getElementById('app').classList.add('show');
     document.getElementById('sb-user-initials').textContent = initials(u.name);
     document.getElementById('sb-user-name').textContent = u.name;
-    subscribeProjects();
+    subscribeData();
   } else {
     await auth.signOut();
     document.getElementById('login-error').textContent = storedPin==='0000' ? 'Incorrect PIN. First login uses 0000 — change it once you\'re in.' : 'Incorrect PIN. Try again.';
@@ -625,71 +624,76 @@ document.querySelectorAll('.nav-item').forEach(el=>{
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     el.classList.add('active');
     state.view = el.dataset.view;
-    state.activeProjectId = null;
-    state.editingProjectId = null;
+    state.activePoId = null;
+    state.editingPoId = null;
     render();
   });
 });
 
 /* ============================================================
-   FIRESTORE SUBSCRIPTION
+   FIRESTORE SUBSCRIPTIONS
    ============================================================ */
-function subscribeProjects(){
-  db.collection('projects').onSnapshot(snap=>{
-    state.projects = snap.docs.map(d=>({id:d.id, ...d.data()}));
+function subscribeData(){
+  db.collection('models').onSnapshot(snap=>{
+    state.models = snap.docs.map(d=>({id:d.id, ...d.data()}));
     render();
   }, err=>{
     console.error(err);
-    document.getElementById('main').innerHTML = `<div class="empty-state"><i class="ti ti-plug-connected-x"></i>Could not load projects. Check your Firebase config and Firestore rules.</div>`;
+    document.getElementById('main').innerHTML = `<div class="empty-state"><i class="ti ti-plug-connected-x"></i>Could not load models. Check your Firebase config and Firestore rules.</div>`;
   });
+  db.collection('pos').onSnapshot(snap=>{
+    state.pos = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    render();
+  }, err=>{ console.error(err); });
 }
+function modelFor(po){ return state.models.find(m=>m.id===po.modelId); }
 
 /* ============================================================
    HELPERS: progress, outstanding, packing
    ============================================================ */
-function visibleTasks(project){
-  return WORKFLOW.flatMap(p=>p.tasks.filter(t=>{
+function computeProgress(po){
+  const tasks = WORKFLOW.flatMap(ph=>ph.tasks.filter(t=>{
+    const model = modelFor(po);
     if(!t.onlyIf) return true;
-    return project.specialItems && project.specialItems[t.onlyIf];
-  }).map(t=>({...t, phaseId:p.id, phaseLabel:p.label})));
-}
-function computeProgress(project){
-  const tasks = visibleTasks(project);
-  const doneCount = tasks.filter(t=>project.tasks && project.tasks[t.id] && project.tasks[t.id].done).length;
+    return model && model.specialItems && model.specialItems[t.onlyIf];
+  }));
+  const doneCount = tasks.filter(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done).length;
   return tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
 }
-function currentPhaseLabel(project){
-  for(const p of WORKFLOW){
-    const relevant = p.tasks.filter(t=>!t.onlyIf || (project.specialItems && project.specialItems[t.onlyIf]));
-    const allDone = relevant.every(t=>project.tasks && project.tasks[t.id] && project.tasks[t.id].done);
-    if(!allDone) return p.label.replace(/Phase \d+ — /,'');
+function currentPhaseLabel(po){
+  const model = modelFor(po);
+  for(const ph of WORKFLOW){
+    const relevant = ph.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf]));
+    const allDone = relevant.every(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done);
+    if(!allDone) return ph.label.replace(/Phase \d+ — /,'');
   }
   return 'Complete';
 }
-function daysUntil(dateStr){
-  if(!dateStr) return null;
-  const d = new Date(dateStr); const now = new Date();
-  return Math.ceil((d - now)/(1000*60*60*24));
+function toolingProgress(model){
+  if(!model) return {done:0, total:TOOLING_TASKS.length};
+  const done = TOOLING_TASKS.filter(t=>model.toolingTasks && model.toolingTasks[t.id] && model.toolingTasks[t.id].done).length;
+  return {done, total:TOOLING_TASKS.length};
 }
-function outstandingForProject(project){
-  return visibleTasks(project).filter(t=>!(project.tasks && project.tasks[t.id] && project.tasks[t.id].done))
+function outstandingForPo(po){
+  const model = modelFor(po);
+  return WORKFLOW.flatMap(ph=>ph.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf])).map(t=>({...t, phaseId:ph.id, phaseLabel:ph.label})))
+    .filter(t=>!(po.tasks && po.tasks[t.id] && po.tasks[t.id].done))
     .map(t=>{
       let urgent = false;
-      if(t.urgent && project.estShipDate){
-        const d = daysUntil(project.estShipDate);
+      if(t.urgent && po.estShipDate){
+        const d = daysUntil(po.estShipDate);
         urgent = d !== null && d <= 30;
       }
-      return {...t, urgent, projectId:project.id, projectTitle:projectTitle(project)};
+      return {...t, urgent, poId:po.id, poTitle:poTitle(po)};
     });
 }
-function allOutstanding(){
-  return state.projects.flatMap(p=>outstandingForProject(p));
-}
-function projectTitle(p){ return `${p.poNumber?('PO '+p.poNumber+' — '):''}${p.modelName||'Untitled'}`; }
-function packingFor(project){
-  const d = PACKING_DEFAULTS[project.scale] || {pcsPerCarton:null, cartonsPerMaster:null};
-  const pcsPerCarton = (project.packing && project.packing.pcsPerCarton!=null) ? project.packing.pcsPerCarton : d.pcsPerCarton;
-  const cartonsPerMaster = (project.packing && project.packing.cartonsPerMaster!=null) ? project.packing.cartonsPerMaster : d.cartonsPerMaster;
+function allOutstanding(){ return state.pos.flatMap(po=>outstandingForPo(po)); }
+function poTitle(po){ return `${po.poNumber?('PO '+po.poNumber+' — '):''}${po.mengyiCode||'Untitled'}`; }
+function packingFor(model){
+  if(!model) return { pcsPerCarton:null, cartonsPerMaster:null, pcsPerMaster:null };
+  const d = PACKING_DEFAULTS[model.scale] || {pcsPerCarton:null, cartonsPerMaster:null};
+  const pcsPerCarton = (model.packing && model.packing.pcsPerCarton!=null) ? model.packing.pcsPerCarton : d.pcsPerCarton;
+  const cartonsPerMaster = (model.packing && model.packing.cartonsPerMaster!=null) ? model.packing.cartonsPerMaster : d.cartonsPerMaster;
   return { pcsPerCarton, cartonsPerMaster, pcsPerMaster: (pcsPerCarton&&cartonsPerMaster)? pcsPerCarton*cartonsPerMaster : null };
 }
 
@@ -699,41 +703,37 @@ function packingFor(project){
 function render(){
   document.getElementById('outstanding-count').textContent = allOutstanding().length;
   const main = document.getElementById('main');
-  if(state.activeProjectId){
-    if(state.activeColorLetter) renderItemDetail(main);
-    else renderProjectDetail(main);
-    return;
-  }
+  if(state.activePoId){ renderPoDetail(main); return; }
   if(state.view==='dashboard') renderDashboard(main);
-  else if(state.view==='projects') renderProjectsList(main);
+  else if(state.view==='projects') renderPosList(main);
   else if(state.view==='outstanding') renderOutstanding(main);
-  else if(state.view==='new') renderNewProjectForm(main, state.editingProjectId ? state.projects.find(x=>x.id===state.editingProjectId) : null);
+  else if(state.view==='new') renderPoForm(main, state.editingPoId ? state.pos.find(x=>x.id===state.editingPoId) : null);
 }
 
 /* ---------- Dashboard ---------- */
 function renderDashboard(main){
-  const total = state.projects.length;
-  const inSampling = state.projects.filter(p=>currentPhaseLabel(p).includes('Deco sampling')).length;
-  const inProduction = state.projects.filter(p=>['PO & pre-production','Packaging & pre-shipment'].includes(currentPhaseLabel(p))).length;
-  const pmOptions = [...new Set(state.projects.map(p=>p.motormaxPM).filter(Boolean))];
-  const itemOptions = [...new Set(state.projects.flatMap(p=>(p.colors||[]).map(c=>c.mengyiCode)))];
+  const total = state.pos.length;
+  const inSampling = state.pos.filter(po=>currentPhaseLabel(po).includes('Deco sampling')).length;
+  const inProduction = state.pos.filter(po=>['PO & pre-production','Packaging & pre-shipment'].includes(currentPhaseLabel(po))).length;
+  const pmOptions = [...new Set(state.pos.map(po=>po.motormaxPM).filter(Boolean))];
+  const itemOptions = [...new Set(state.pos.map(po=>po.mengyiCode).filter(Boolean))];
   let outstanding = allOutstanding();
   if(state.outstandingFilterPM) outstanding = outstanding.filter(t=>{
-    const proj = state.projects.find(p=>p.id===t.projectId); return proj && proj.motormaxPM===state.outstandingFilterPM;
+    const po = state.pos.find(x=>x.id===t.poId); return po && po.motormaxPM===state.outstandingFilterPM;
   });
   if(state.outstandingFilterItem) outstanding = outstanding.filter(t=>{
-    const proj = state.projects.find(p=>p.id===t.projectId); return proj && (proj.colors||[]).some(c=>c.mengyiCode===state.outstandingFilterItem);
+    const po = state.pos.find(x=>x.id===t.poId); return po && po.mengyiCode===state.outstandingFilterItem;
   });
   main.innerHTML = `
     <div class="page-head"><h2>Dashboard</h2></div>
     <div class="stat-row">
-      <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total projects</div></div>
+      <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total POs</div></div>
       <div class="stat-card"><div class="num">${inSampling}</div><div class="lbl">In deco sampling</div></div>
       <div class="stat-card"><div class="num">${inProduction}</div><div class="lbl">In production</div></div>
       <div class="stat-card warn"><div class="num">${allOutstanding().length}</div><div class="lbl">Outstanding tasks</div></div>
     </div>
-    <div class="section-title">Recent projects</div>
-    <div id="dash-projects"></div>
+    <div class="section-title">Recent POs</div>
+    <div id="dash-pos"></div>
     <div class="section-title" style="margin-top:24px;">Top outstanding tasks</div>
     <div style="display:flex; gap:10px; margin-bottom:12px;">
       <select id="filter-pm" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
@@ -747,12 +747,12 @@ function renderDashboard(main){
     </div>
     <div class="list-table" id="dash-outstanding"></div>
   `;
-  const dp = document.getElementById('dash-projects');
-  if(!state.projects.length){
-    dp.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No projects yet. Create one from "New Project".</div>`;
+  const dp = document.getElementById('dash-pos');
+  if(!state.pos.length){
+    dp.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No POs yet. Create one from "New PO".</div>`;
   } else {
-    dp.innerHTML = state.projects.slice(0,6).map(p=>projectCardHTML(p)).join('');
-    attachProjectCardEvents(dp);
+    dp.innerHTML = state.pos.slice(0,6).map(po=>poCardHTML(po)).join('');
+    attachPoCardEvents(dp);
   }
   const dOut = document.getElementById('dash-outstanding');
   const top = outstanding.sort((a,b)=>b.urgent-a.urgent).slice(0,8);
@@ -761,28 +761,29 @@ function renderDashboard(main){
   document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
 }
-function projectCardHTML(p){
-  const prog = computeProgress(p);
-  const eta = formatShipWeek(p);
-  const d = daysUntil(p.estShipDate);
+function poCardHTML(po){
+  const model = modelFor(po);
+  const prog = computeProgress(po);
+  const eta = formatShipWeek(po);
+  const d = daysUntil(po.estShipDate);
   const urgentEta = d!==null && d<=14 && d>=0;
-  const photo = (p.colors && p.colors[0] && p.colors[0].photoURL) ? p.colors[0].photoURL : null;
+  const tp = toolingProgress(model);
   return `
-    <div class="proj-card" data-pid="${p.id}">
-      <div class="proj-thumb" style="${photo?`background-image:url('${photo}')`:''}">${photo?'':'<i class="ti ti-photo"></i>'}</div>
+    <div class="proj-card" data-pid="${po.id}">
+      <div class="proj-thumb"><i class="ti ti-photo"></i></div>
       <div class="proj-info">
-        <div class="title">${p.poNumber?('PO '+p.poNumber+' · '):''}${p.modelName||'Untitled'}</div>
-        <div class="sub">${p.mengyiBaseNumber?('MengYi '+p.mengyiBaseNumber+' · '):''}${p.norevNumber?('Norev '+p.norevNumber+' · '):''}${p.scale||''} · PM: ${p.motormaxPM||'—'}</div>
+        <div class="title">${po.poNumber?('PO '+po.poNumber+' · '):''}${po.mengyiCode||'Untitled'} ${po.colorName?('— '+po.colorName):''}</div>
+        <div class="sub">${model?(model.modelName+' · '+model.scale+' · '):''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}PM: ${po.motormaxPM||'—'} · Tooling ${tp.done}/${tp.total}</div>
       </div>
-      <span class="phase-badge">${currentPhaseLabel(p)}</span>
+      <span class="phase-badge">${currentPhaseLabel(po)}</span>
       <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
       <div class="eta-tag ${urgentEta?'urgent':''}" style="width:120px;">${eta}</div>
     </div>`;
 }
-function attachProjectCardEvents(container){
+function attachPoCardEvents(container){
   container.querySelectorAll('.proj-card').forEach(el=>{
     el.addEventListener('click', ()=>{
-      state.activeProjectId = el.dataset.pid;
+      state.activePoId = el.dataset.pid;
       state.detailTab = 'workflow';
       render();
     });
@@ -790,48 +791,53 @@ function attachProjectCardEvents(container){
 }
 function outstandingRowHTML(t){
   return `
-    <div class="list-row" data-pid="${t.projectId}">
+    <div class="list-row" data-pid="${t.poId}">
       <span class="task-text">${t.text}</span>
       <span class="chip">${t.phaseLabel.replace(/Phase \d+ — /,'')}</span>
-      <span class="chip">${t.projectTitle}</span>
+      <span class="chip">${t.poTitle}</span>
       ${t.urgent?'<span class="chip urgent">Due soon</span>':''}
-      <button class="btn btn-sm btn-ghost open-project">Open</button>
+      <button class="btn btn-sm btn-ghost open-po">Open</button>
     </div>`;
 }
 function attachOutstandingEvents(container){
-  container.querySelectorAll('.open-project').forEach(btn=>{
+  container.querySelectorAll('.open-po').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       const pid = e.target.closest('.list-row').dataset.pid;
-      state.activeProjectId = pid; state.detailTab='workflow'; render();
+      state.activePoId = pid; state.detailTab='workflow'; render();
     });
   });
 }
 
-/* ---------- Projects list ---------- */
-function renderProjectsList(main){
+/* ---------- All POs list ---------- */
+function renderPosList(main){
   main.innerHTML = `
-    <div class="page-head"><h2>All Projects</h2></div>
-    <div id="proj-list"></div>
+    <div class="page-head"><h2>All POs</h2></div>
+    <div id="po-list"></div>
   `;
-  const list = document.getElementById('proj-list');
-  if(!state.projects.length){
-    list.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No projects yet.</div>`;
+  const list = document.getElementById('po-list');
+  if(!state.pos.length){
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No POs yet.</div>`;
   } else {
-    list.innerHTML = state.projects.map(p=>projectCardHTML(p)).join('');
-    attachProjectCardEvents(list);
+    list.innerHTML = state.pos.map(po=>poCardHTML(po)).join('');
+    attachPoCardEvents(list);
   }
 }
 
 /* ---------- Outstanding tasks (full) — grouped by PO first ---------- */
 function renderOutstanding(main){
-  const pmOptions = [...new Set(state.projects.map(p=>p.motormaxPM).filter(Boolean))];
-  const itemOptions = [...new Set(state.projects.flatMap(p=>(p.colors||[]).map(c=>c.mengyiCode)))];
-  let groups = state.projects
-    .map(p=>({p, tasks:outstandingForProject(p)}))
+  const pmOptions = [...new Set(state.pos.map(po=>po.motormaxPM).filter(Boolean))];
+  const itemOptions = [...new Set(state.pos.map(po=>po.mengyiCode).filter(Boolean))];
+  let groups = state.pos
+    .map(po=>({po, tasks:outstandingForPo(po)}))
     .filter(g=>g.tasks.length);
-  if(state.outstandingFilterPM) groups = groups.filter(g=>g.p.motormaxPM===state.outstandingFilterPM);
-  if(state.outstandingFilterItem) groups = groups.filter(g=>(g.p.colors||[]).some(c=>c.mengyiCode===state.outstandingFilterItem));
+  if(state.outstandingFilterPM) groups = groups.filter(g=>g.po.motormaxPM===state.outstandingFilterPM);
+  if(state.outstandingFilterItem) groups = groups.filter(g=>g.po.mengyiCode===state.outstandingFilterItem);
   groups.sort((a,b)=> (b.tasks.some(t=>t.urgent)?1:0) - (a.tasks.some(t=>t.urgent)?1:0));
+
+  const toolingGroups = state.models
+    .map(m=>({m, incomplete:TOOLING_TASKS.filter(t=>!(m.toolingTasks && m.toolingTasks[t.id] && m.toolingTasks[t.id].done))}))
+    .filter(g=>g.incomplete.length);
+
   main.innerHTML = `
     <div class="page-head"><h2>Outstanding Tasks</h2></div>
     <div style="display:flex; gap:10px; margin-bottom:18px;">
@@ -844,9 +850,18 @@ function renderOutstanding(main){
         ${itemOptions.map(code=>`<option value="${code}" ${state.outstandingFilterItem===code?'selected':''}>${code}</option>`).join('')}
       </select>
     </div>
+    ${toolingGroups.length?`
+      <div class="section-title">Shared tooling — outstanding (by model)</div>
+      <div class="list-table" style="margin-bottom:18px;">
+        ${toolingGroups.map(g=>g.incomplete.map(t=>`
+          <div class="list-row">
+            <span class="task-text">${t.text}</span>
+            <span class="chip">${g.m.modelName} (${g.m.mengyiBaseNumber})</span>
+          </div>`).join('')).join('')}
+      </div>` : ''}
     ` +
-    (groups.length ? groups.map(({p,tasks})=>`
-      <div class="section-title">${projectTitle(p)} <span class="chip">${currentPhaseLabel(p)}</span> <span class="chip">${p.colors&&p.colors.length?p.colors.length+' colour'+(p.colors.length>1?'s':''):''}</span></div>
+    (groups.length ? groups.map(({po,tasks})=>`
+      <div class="section-title">${poTitle(po)} <span class="chip">${currentPhaseLabel(po)}</span></div>
       <div class="list-table" style="margin-bottom:18px;">${tasks.map(outstandingRowHTML).join('')}</div>
     `).join('') : `<div class="empty-state"><i class="ti ti-checkbox"></i>Nothing outstanding matching this filter.</div>`);
   attachOutstandingEvents(main);
@@ -854,28 +869,46 @@ function renderOutstanding(main){
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
 }
 
-/* ---------- New / Edit Project form ---------- */
-function renderNewProjectForm(main, existing){
+/* ---------- New / Edit PO form ---------- */
+function renderPoForm(main, existing){
   const isEdit = !!existing;
+  const existingModel = isEdit ? modelFor(existing) : null;
   main.innerHTML = `
-    <div class="page-head"><h2>${isEdit?'Edit Project':'New Project'}</h2></div>
+    <div class="page-head"><h2>${isEdit?'Edit PO':'New PO'}</h2></div>
     <div class="form-card">
       <div class="form-grid">
-        <div class="form-group"><label>PO Number</label><input id="f-po" placeholder="e.g. PO-2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
-        <div class="form-group"><label>Model name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${isEdit?(existing.modelName||''):''}"></div>
-        <div class="form-group"><label>Scale</label>
-          <select id="f-scale">
-            <option value="1:12" ${isEdit&&existing.scale==='1:12'?'selected':''}>1:12</option>
-            <option value="1:18" ${isEdit&&existing.scale==='1:18'?'selected':''}>1:18</option>
-          </select>
+        <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
+        <div id="model-status" style="grid-column:1/-1; font-size:12.5px; color:var(--ink-soft);"></div>
+        <div class="form-group full" id="new-model-fields" style="display:none;">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="form-group"><label>Model name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
+            <div class="form-group"><label>Scale</label>
+              <select id="f-scale">
+                <option value="1:12" ${existingModel&&existingModel.scale==='1:12'?'selected':''}>1:12</option>
+                <option value="1:18" ${existingModel&&existingModel.scale==='1:18'?'selected':''}>1:18</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <div class="checkbox-row">
+                <label><input type="checkbox" id="f-chassis" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
+                <label><input type="checkbox" id="f-booklet" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.booklet?'checked':''}> Printed booklet</label>
+                <label><input type="checkbox" id="f-holo" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.hologram?'checked':''}> Hologram sticker (customer-provided)</label>
+              </div>
+            </div>
+          </div>
         </div>
+        <div class="form-group"><label>Colour letter</label><input id="f-color-letter" maxlength="1" placeholder="A" value="${isEdit?(existing.colorLetter||''):''}"></div>
+        <div class="form-group"><label>Colour name</label><input id="f-color-name" placeholder="e.g. Red" value="${isEdit?(existing.colorName||''):''}"></div>
+        <div class="form-group"><label>Item code preview</label><div class="field-val" id="code-preview" style="padding-top:8px;">—</div></div>
+        <div class="form-group"><label>PO Number</label><input id="f-po" placeholder="e.g. PO-2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
         <div class="form-group"><label>Norev product # (6-digit)</label><input id="f-norev" maxlength="6" placeholder="123456" value="${isEdit?(existing.norevNumber||''):''}"></div>
-        <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="8493" value="${isEdit?(existing.mengyiBaseNumber||''):''}"></div>
         <div class="form-group"><label>Motormax item #</label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
         <div class="form-group"><label>Motormax PM</label>
           <select id="f-pm">${state.users.map(u=>`<option value="${u.name}" ${isEdit&&existing.motormaxPM===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
         </div>
         <div class="form-group"><label>Order qty</label><input id="f-qty" type="number" placeholder="e.g. 3000" value="${isEdit&&existing.qty?existing.qty:''}"></div>
+        <div class="form-group"><label>Export qty</label><input id="f-export" type="number" value="${isEdit&&existing.exportQty!=null?existing.exportQty:''}"></div>
+        <div class="form-group"><label>Domestic qty</label><input id="f-domestic" type="number" value="${isEdit&&existing.domesticQty!=null?existing.domesticQty:''}"></div>
         <div class="form-group">
           <label>Estimated ship — week number</label>
           <div style="display:flex;gap:8px;">
@@ -884,73 +917,42 @@ function renderNewProjectForm(main, existing){
           </div>
           <div id="f-eta-preview" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
         </div>
-        <div class="form-group full">
-          <label>Special items</label>
-          <div class="checkbox-row">
-            <label><input type="checkbox" id="f-chassis" ${isEdit&&existing.specialItems&&existing.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
-            <label><input type="checkbox" id="f-booklet" ${isEdit&&existing.specialItems&&existing.specialItems.booklet?'checked':''}> Printed booklet</label>
-            <label><input type="checkbox" id="f-holo" ${isEdit&&existing.specialItems&&existing.specialItems.hologram?'checked':''}> Hologram sticker (customer-provided)</label>
-          </div>
-        </div>
-        <div class="form-group full">
-          <label>Colours (letter + short name — the Nx#### code is generated automatically from the MengYi base number)</label>
-          <div id="color-inputs"></div>
-          <button class="btn btn-sm" id="add-color" type="button"><i class="ti ti-plus"></i> Add colour</button>
-        </div>
       </div>
       <div style="margin-top:20px; display:flex; gap:10px;">
-        <button class="btn btn-primary" id="save-project"><i class="ti ti-device-floppy"></i> ${isEdit?'Save changes':'Create project'}</button>
-        <button class="btn" id="cancel-project">Cancel</button>
+        <button class="btn btn-primary" id="save-po"><i class="ti ti-device-floppy"></i> ${isEdit?'Save changes':'Create PO'}</button>
+        <button class="btn" id="cancel-po">Cancel</button>
       </div>
     </div>
   `;
-  let colorRows = isEdit && existing.colors && existing.colors.length
-    ? existing.colors.map(c=>({letter:c.letter, name:c.name||'', _orig:c}))
-    : [{letter:'A', name:''}];
-  const box = document.getElementById('color-inputs');
-  function mengyiVal(){ return document.getElementById('f-mengyi').value || '####'; }
-  function paintColorRows(){
-    box.innerHTML = colorRows.map((c,i)=>`
-      <div class="color-input-row" data-idx="${i}">
-        <input style="max-width:60px" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A">
-        <input value="${c.name}" data-field="name" placeholder="Colour name e.g. Red">
-        <span class="code-preview" data-preview>N${c.letter||'x'}${mengyiVal()}</span>
-        ${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color" type="button"><i class="ti ti-x"></i></button>`:''}
-      </div>`).join('');
+  function refreshCodePreview(){
+    const base = document.getElementById('f-mengyi').value || '####';
+    const letter = document.getElementById('f-color-letter').value.toUpperCase().slice(0,1) || 'x';
+    document.getElementById('code-preview').textContent = `N${letter}${base}`;
   }
-  paintColorRows();
-  // Event delegation on the container — attached ONCE, so typing never
-  // triggers a full re-render and the input never loses focus.
-  box.addEventListener('input', (e)=>{
-    const row = e.target.closest('.color-input-row'); if(!row) return;
-    const idx = Number(row.dataset.idx);
-    const field = e.target.dataset.field; if(!field) return;
-    if(field==='letter'){
-      const upper = e.target.value.toUpperCase().slice(0,1);
-      colorRows[idx].letter = upper;
-      if(e.target.value !== upper) e.target.value = upper;
-    } else {
-      colorRows[idx].name = e.target.value;
+  function refreshModelStatus(){
+    const base = document.getElementById('f-mengyi').value.trim();
+    const statusEl = document.getElementById('model-status');
+    const newFieldsEl = document.getElementById('new-model-fields');
+    if(isEdit){
+      statusEl.innerHTML = existingModel ? `Linked to model <b>${existingModel.modelName}</b> (${existingModel.scale}). Model/tooling details are edited from the PO's "Tooling & Model" tab.` : '';
+      newFieldsEl.style.display = 'none';
+      return;
     }
-    row.querySelector('[data-preview]').textContent = `N${colorRows[idx].letter||'x'}${mengyiVal()}`;
-  });
-  box.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.remove-color'); if(!btn) return;
-    const row = btn.closest('.color-input-row');
-    colorRows.splice(Number(row.dataset.idx),1);
-    paintColorRows();
-  });
-  document.getElementById('f-mengyi').addEventListener('input', ()=>{
-    box.querySelectorAll('.color-input-row').forEach(row=>{
-      const idx = Number(row.dataset.idx);
-      row.querySelector('[data-preview]').textContent = `N${colorRows[idx].letter||'x'}${mengyiVal()}`;
-    });
-  });
-  document.getElementById('add-color').addEventListener('click', ()=>{
-    const nextLetter = String.fromCharCode(65 + colorRows.length);
-    colorRows.push({letter:nextLetter, name:''});
-    paintColorRows();
-  });
+    const found = state.models.find(m=>m.mengyiBaseNumber===base);
+    if(base && found){
+      statusEl.innerHTML = `<span class="chip">Linked to existing model: ${found.modelName} (${found.scale})</span> — model/tooling fields won't be shown again here.`;
+      newFieldsEl.style.display = 'none';
+    } else if(base){
+      statusEl.innerHTML = `No model found for ${base} yet — fill in the model details below (one-time, shared by every colour of this number).`;
+      newFieldsEl.style.display = 'block';
+    } else {
+      statusEl.innerHTML = '';
+      newFieldsEl.style.display = 'none';
+    }
+  }
+  refreshModelStatus(); refreshCodePreview();
+  document.getElementById('f-mengyi').addEventListener('input', ()=>{ refreshModelStatus(); refreshCodePreview(); });
+  document.getElementById('f-color-letter').addEventListener('input', refreshCodePreview);
   function updateEtaPreview(){
     const wk = Number(document.getElementById('f-eta-week').value);
     const yr = Number(document.getElementById('f-eta-year').value);
@@ -963,99 +965,125 @@ function renderNewProjectForm(main, existing){
   updateEtaPreview();
   document.getElementById('f-eta-week').addEventListener('input', updateEtaPreview);
   document.getElementById('f-eta-year').addEventListener('input', updateEtaPreview);
-  document.getElementById('cancel-project').addEventListener('click', ()=>{ state.editingProjectId=null; state.view='dashboard'; render(); });
-  document.getElementById('save-project').addEventListener('click', async ()=>{
+  document.getElementById('cancel-po').addEventListener('click', ()=>{ state.editingPoId=null; state.view='dashboard'; render(); });
+  document.getElementById('save-po').addEventListener('click', async ()=>{
     if(isEdit && !requireEdit(existing)) return;
-    const mengyiBase = document.getElementById('f-mengyi').value.trim();
-    const colors = colorRows.filter(c=>c.letter).map(c=>({
-      photoURL:'', exportQty:null, domesticQty:null, toolingLog:[],
-      ...(c._orig||{}),
-      letter:c.letter, name:c.name, mengyiCode:`N${c.letter}${mengyiBase}`,
-    }));
+    const base = document.getElementById('f-mengyi').value.trim();
+    const letter = document.getElementById('f-color-letter').value.toUpperCase().slice(0,1);
+    const colorName = document.getElementById('f-color-name').value.trim();
+    if(!base || !letter){ alert('Please enter both the MengYi base number and a colour letter.'); return; }
+    let modelId;
+    if(isEdit){
+      modelId = existing.modelId;
+    } else {
+      const found = state.models.find(m=>m.mengyiBaseNumber===base);
+      if(found){
+        modelId = found.id;
+      } else {
+        const modelName = document.getElementById('f-model').value.trim();
+        if(!modelName){ alert('Please enter a model name for this new base number.'); return; }
+        const modelRef = await db.collection('models').add({
+          mengyiBaseNumber: base,
+          modelName,
+          scale: document.getElementById('f-scale').value,
+          specialItems: {
+            chassisPlate: document.getElementById('f-chassis').checked,
+            booklet: document.getElementById('f-booklet').checked,
+            hologram: document.getElementById('f-holo').checked,
+          },
+          packing: {},
+          toolingTasks: {},
+          toolingLog: [],
+          createdByUserId: state.currentUser.id,
+          createdByName: state.currentUser.name,
+          createdAt: Date.now(),
+        });
+        modelId = modelRef.id;
+      }
+    }
     const wk = Number(document.getElementById('f-eta-week').value)||null;
     const yr = Number(document.getElementById('f-eta-year').value)||null;
     let estShipDate = null;
     if(wk && yr){ estShipDate = isoWeekToDates(yr, wk).monday.toISOString().slice(0,10); }
     const fields = {
+      modelId,
+      mengyiBaseNumber: base,
+      colorLetter: letter,
+      colorName,
+      mengyiCode: `N${letter}${base}`,
       poNumber: document.getElementById('f-po').value.trim(),
-      modelName: document.getElementById('f-model').value.trim(),
-      scale: document.getElementById('f-scale').value,
       norevNumber: document.getElementById('f-norev').value.trim(),
-      mengyiBaseNumber: mengyiBase,
       motormaxItemNumber: document.getElementById('f-motormax').value.trim(),
       motormaxPM: document.getElementById('f-pm').value,
       qty: Number(document.getElementById('f-qty').value)||null,
+      exportQty: Number(document.getElementById('f-export').value)||null,
+      domesticQty: Number(document.getElementById('f-domestic').value)||null,
       estShipWeekNum: wk,
       estShipYear: yr,
       estShipDate,
-      specialItems: {
-        chassisPlate: document.getElementById('f-chassis').checked,
-        booklet: document.getElementById('f-booklet').checked,
-        hologram: document.getElementById('f-holo').checked,
-      },
-      colors,
     };
-    if(!fields.modelName){ alert('Please enter a model name.'); return; }
     if(isEdit){
-      await db.collection('projects').doc(existing.id).update(fields);
-      state.editingProjectId = null;
-      state.activeProjectId = existing.id; state.detailTab='workflow'; state.view='dashboard';
+      await db.collection('pos').doc(existing.id).update(fields);
+      state.editingPoId = null;
+      state.activePoId = existing.id; state.detailTab='workflow'; state.view='dashboard';
     } else {
-      const project = { ...fields, packing:{}, tasks:{}, createdAt:Date.now(), createdByName:state.currentUser.name, createdByUserId:state.currentUser.id };
-      const ref = await db.collection('projects').add(project);
-      state.activeProjectId = ref.id; state.detailTab='workflow'; state.view='dashboard';
+      const po = { ...fields, tasks:{}, createdAt:Date.now(), createdByName:state.currentUser.name, createdByUserId:state.currentUser.id };
+      const ref = await db.collection('pos').add(po);
+      state.activePoId = ref.id; state.detailTab='workflow'; state.view='dashboard';
     }
     render();
   });
 }
 
-/* ---------- Project detail ---------- */
-function renderProjectDetail(main){
-  const p = state.projects.find(x=>x.id===state.activeProjectId);
-  if(!p){ state.activeProjectId=null; render(); return; }
-  const prog = computeProgress(p);
-  const editable = canEdit(p);
+/* ---------- PO detail ---------- */
+function renderPoDetail(main){
+  const po = state.pos.find(x=>x.id===state.activePoId);
+  if(!po){ state.activePoId=null; render(); return; }
+  const model = modelFor(po);
+  const prog = computeProgress(po);
+  const editable = canEdit(po);
   main.innerHTML = `
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back</button>
-      <h2 style="margin-left:10px;">${p.modelName}</h2>
-      ${editable?`<button class="btn btn-sm" id="edit-project-btn"><i class="ti ti-pencil"></i> Edit project</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${p.createdByName||'another PM'}</span>`}
+      <h2 style="margin-left:10px;">${po.mengyiCode} ${po.colorName?('— '+po.colorName):''}</h2>
+      ${editable?`<button class="btn btn-sm" id="edit-po-btn"><i class="ti ti-pencil"></i> Edit PO</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${po.createdByName||'another PM'}</span>`}
     </div>
     <div class="detail-head">
       <div class="field-grid">
-        <div><div class="field-label">PO Number</div><div class="field-val">${p.poNumber||'—'}</div></div>
-        <div><div class="field-label">Norev #</div><div class="field-val">${p.norevNumber||'—'}</div></div>
-        <div><div class="field-label">MengYi base #</div><div class="field-val">${p.mengyiBaseNumber||'—'}</div></div>
-        <div><div class="field-label">Motormax item #</div><div class="field-val">${p.motormaxItemNumber||'—'}</div></div>
-        <div><div class="field-label">Scale</div><div class="field-val">${p.scale||'—'}</div></div>
-        <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${p.motormaxPM||'—'}</div></div>
-        <div><div class="field-label">Order qty</div><div class="field-val">${p.qty||'—'}</div></div>
-        <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(p)}</div></div>
+        <div><div class="field-label">PO Number</div><div class="field-val">${po.poNumber||'—'}</div></div>
+        <div><div class="field-label">Model</div><div class="field-val" style="font-family:inherit;">${model?model.modelName:'—'}</div></div>
+        <div><div class="field-label">Norev #</div><div class="field-val">${po.norevNumber||'—'}</div></div>
+        <div><div class="field-label">Motormax item #</div><div class="field-val">${po.motormaxItemNumber||'—'}</div></div>
+        <div><div class="field-label">Scale</div><div class="field-val">${model?model.scale:'—'}</div></div>
+        <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.motormaxPM||'—'}</div></div>
+        <div><div class="field-label">Order qty</div><div class="field-val">${po.qty||'—'} <span style="font-size:11px;color:var(--ink-soft);">(Exp ${po.exportQty??'—'} / Dom ${po.domesticQty??'—'})</span></div></div>
+        <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(po)}</div></div>
         <div><div class="field-label">Progress</div><div class="field-val">${prog}%</div></div>
       </div>
     </div>
     <div class="tabs">
       <div class="tab ${state.detailTab==='workflow'?'active':''}" data-tab="workflow">Workflow</div>
-      <div class="tab ${state.detailTab==='items'?'active':''}" data-tab="items">Items / Colours</div>
+      <div class="tab ${state.detailTab==='tooling'?'active':''}" data-tab="tooling">Tooling & Model</div>
       <div class="tab ${state.detailTab==='packing'?'active':''}" data-tab="packing">Packing</div>
     </div>
     <div id="tab-content"></div>
   `;
-  document.getElementById('back-btn').addEventListener('click', ()=>{ state.activeProjectId=null; render(); });
-  const editBtn = document.getElementById('edit-project-btn');
-  if(editBtn) editBtn.addEventListener('click', ()=>{ state.editingProjectId = p.id; state.activeProjectId = null; state.view='new'; render(); });
-  main.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{ state.detailTab=t.dataset.tab; renderProjectDetail(main); }));
+  document.getElementById('back-btn').addEventListener('click', ()=>{ state.activePoId=null; render(); });
+  const editBtn = document.getElementById('edit-po-btn');
+  if(editBtn) editBtn.addEventListener('click', ()=>{ state.editingPoId = po.id; state.activePoId = null; state.view='new'; render(); });
+  main.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{ state.detailTab=t.dataset.tab; renderPoDetail(main); }));
   const tc = document.getElementById('tab-content');
-  if(state.detailTab==='workflow') renderWorkflowTab(tc, p);
-  else if(state.detailTab==='items') renderItemsTab(tc, p);
-  else renderPackingTab(tc, p);
+  if(state.detailTab==='workflow') renderWorkflowTab(tc, po);
+  else if(state.detailTab==='tooling') renderToolingTab(tc, po, model);
+  else renderPackingTab(tc, model);
 }
 
-function renderWorkflowTab(tc, p){
+function renderWorkflowTab(tc, po){
+  const model = modelFor(po);
   tc.innerHTML = WORKFLOW.map(phase=>{
-    const relevant = phase.tasks.filter(t=>!t.onlyIf || (p.specialItems && p.specialItems[t.onlyIf]));
+    const relevant = phase.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf]));
     if(!relevant.length) return '';
-    const doneCount = relevant.filter(t=>p.tasks && p.tasks[t.id] && p.tasks[t.id].done).length;
+    const doneCount = relevant.filter(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done).length;
     const stampClass = doneCount===relevant.length ? 'complete' : doneCount>0 ? 'partial' : '';
     return `
       <div class="phase-block">
@@ -1064,16 +1092,16 @@ function renderWorkflowTab(tc, p){
           ${phase.label}
         </div>
         <div class="phase-tasks">
-          ${relevant.map(t=>taskRowHTML(p, t)).join('')}
+          ${relevant.map(t=>taskRowHTML(po, t)).join('')}
         </div>
       </div>`;
   }).join('');
-  attachTaskEvents(tc, p);
+  attachTaskEvents(tc, po);
 }
-function taskRowHTML(p, t){
-  const rec = (p.tasks && p.tasks[t.id]) || {};
+function taskRowHTML(po, t){
+  const rec = (po.tasks && po.tasks[t.id]) || {};
   const done = !!rec.done;
-  const urgent = t.urgent && p.estShipDate && !done && daysUntil(p.estShipDate)<=30;
+  const urgent = t.urgent && po.estShipDate && !done && daysUntil(po.estShipDate)<=30;
   return `
     <div class="task-row" data-tid="${t.id}">
       <div class="task-check ${done?'done':''}" data-action="toggle">${done?'<i class="ti ti-check" style="font-size:13px;"></i>':''}</div>
@@ -1090,142 +1118,73 @@ function taskRowHTML(p, t){
       </div>
     </div>`;
 }
-function attachTaskEvents(tc, p){
+function attachTaskEvents(tc, po){
   tc.querySelectorAll('.task-row').forEach(row=>{
     const tid = row.dataset.tid;
     row.querySelector('[data-action="toggle"]').addEventListener('click', async ()=>{
-      if(!requireEdit(p)) return;
-      const rec = (p.tasks && p.tasks[tid]) || {};
+      if(!requireEdit(po)) return;
+      const rec = (po.tasks && po.tasks[tid]) || {};
       const newDone = !rec.done;
       const update = {
         [`tasks.${tid}.done`]: newDone,
         [`tasks.${tid}.doneBy`]: newDone ? state.currentUser.name : null,
         [`tasks.${tid}.doneDate`]: newDone ? new Date().toISOString() : null,
       };
-      await db.collection('projects').doc(p.id).update(update);
+      await db.collection('pos').doc(po.id).update(update);
     });
     const doneDateBtn = row.querySelector('[data-action="setdonedate"]');
     if(doneDateBtn) doneDateBtn.addEventListener('click', async ()=>{
-      if(!requireEdit(p)) return;
-      const rec = (p.tasks && p.tasks[tid]) || {};
+      if(!requireEdit(po)) return;
+      const rec = (po.tasks && po.tasks[tid]) || {};
       const val = prompt('Date for this task (YYYY-MM-DD):', (rec.doneDate||new Date().toISOString()).slice(0,10));
       if(!val) return;
-      await db.collection('projects').doc(p.id).update({
+      await db.collection('pos').doc(po.id).update({
         [`tasks.${tid}.doneDate`]: val,
         [`tasks.${tid}.doneBy`]: rec.doneBy || state.currentUser.name,
       });
     });
     const dateBtn = row.querySelector('[data-action="setdate"]');
     if(dateBtn) dateBtn.addEventListener('click', async ()=>{
-      if(!requireEdit(p)) return;
+      if(!requireEdit(po)) return;
       const val = prompt('Received date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
       if(!val) return;
-      await db.collection('projects').doc(p.id).update({ [`tasks.${tid}.receivedDate`]: val });
+      await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.receivedDate`]: val });
     });
     const sentBtn = row.querySelector('[data-action="setsentdate"]');
     if(sentBtn) sentBtn.addEventListener('click', async ()=>{
-      if(!requireEdit(p)) return;
+      if(!requireEdit(po)) return;
       const val = prompt('Sent date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
       if(!val) return;
-      await db.collection('projects').doc(p.id).update({ [`tasks.${tid}.sentDate`]: val });
+      await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.sentDate`]: val });
     });
     const noteBtn = row.querySelector('[data-action="note"]');
     if(noteBtn) noteBtn.addEventListener('click', async ()=>{
-      if(!requireEdit(p)) return;
-      const rec = (p.tasks && p.tasks[tid]) || {};
+      if(!requireEdit(po)) return;
+      const rec = (po.tasks && po.tasks[tid]) || {};
       const val = prompt('Note (e.g. a link to the file/screenshot in Google Drive or email):', rec.note||'');
       if(val===null) return;
-      await db.collection('projects').doc(p.id).update({ [`tasks.${tid}.note`]: val });
+      await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.note`]: val });
     });
   });
 }
 
-function renderItemsTab(tc, p){
-  const colors = p.colors || [];
-  if(!colors.length){ tc.innerHTML = `<div class="empty-state"><i class="ti ti-palette"></i>No colours added to this project yet.</div>`; return; }
-  const totalExport = colors.reduce((s,c)=>s+(c.exportQty||0),0);
-  const totalDomestic = colors.reduce((s,c)=>s+(c.domesticQty||0),0);
+/* ---------- Tooling & Model tab (shared across colours) ---------- */
+function renderToolingTab(tc, po, model){
+  if(!model){ tc.innerHTML = `<div class="empty-state"><i class="ti ti-alert-triangle"></i>No linked model found.</div>`; return; }
+  const siblings = state.pos.filter(x=>x.modelId===model.id && x.id!==po.id);
+  const editable = canEditModel();
+  const toolingLog = model.toolingLog || [];
+  const tp = toolingProgress(model);
   tc.innerHTML = `
-    <div class="color-tabs">${colors.map(c=>`<div class="color-tab" data-letter="${c.letter}">${c.mengyiCode} ${c.name?('· '+c.name):''}</div>`).join('')}</div>
-    <p style="color:var(--ink-soft);font-size:13px;">Select a colour to open its item page (product numbers, packing, tooling tracking, shipment split).</p>
-    ${(totalExport||totalDomestic)?`<div class="section-title" style="margin-top:16px;">PO shipment split (all colours)</div>
-    <p style="font-size:13px;"><span class="chip">Export: ${totalExport}</span> <span class="chip">Domestic: ${totalDomestic}</span></p>`:''}
-  `;
-  tc.querySelectorAll('.color-tab').forEach(el=>{
-    el.addEventListener('click', ()=>{ state.activeColorLetter = el.dataset.letter; render(); });
-  });
-}
-
-function renderPackingTab(tc, p){
-  const pack = packingFor(p);
-  tc.innerHTML = `
-    <table class="packing-table">
-      <tr><th>Scale</th><th>Pcs / 外箱</th><th>外箱 / 百寶箱</th><th>Pcs / 百寶箱</th></tr>
-      <tr>
-        <td class="mono">${p.scale}</td>
-        <td><input id="pk-pcs" type="number" value="${pack.pcsPerCarton??''}"></td>
-        <td><input id="pk-cartons" type="number" value="${pack.cartonsPerMaster??''}"></td>
-        <td class="mono">${pack.pcsPerMaster??'—'}</td>
-      </tr>
-    </table>
-    <p style="color:var(--ink-soft);font-size:12.5px;margin-top:10px;">Packed in polyfoam box, then closed/window box, then 外箱, then 百寶箱.</p>
-    <button class="btn btn-sm" id="pk-save" style="margin-top:8px;">Save packing</button>
-  `;
-  document.getElementById('pk-save').addEventListener('click', async ()=>{
-    if(!requireEdit(p)) return;
-    const pcs = Number(document.getElementById('pk-pcs').value)||null;
-    const cartons = Number(document.getElementById('pk-cartons').value)||null;
-    await db.collection('projects').doc(p.id).update({ packing: { pcsPerCarton:pcs, cartonsPerMaster:cartons } });
-  });
-}
-
-/* ---------- Item (colour) detail page ---------- */
-async function saveColorPatch(p, letter, patch){
-  const newColors = (p.colors||[]).map(c=>c.letter===letter?{...c, ...patch}:c);
-  await db.collection('projects').doc(p.id).update({ colors: newColors });
-}
-function renderItemDetail(main){
-  const p = state.projects.find(x=>x.id===state.activeProjectId);
-  if(!p){ state.activeProjectId=null; render(); return; }
-  const color = (p.colors||[]).find(c=>c.letter===state.activeColorLetter);
-  if(!color){ state.activeColorLetter=null; render(); return; }
-  const pack = packingFor(p);
-  const editable = canEdit(p);
-  const toolingLog = color.toolingLog || [];
-  main.innerHTML = `
-    <div class="page-head">
-      <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back to project</button>
-      <h2 style="margin-left:10px;">${color.mengyiCode} — ${color.name||''}</h2>
-    </div>
-    <div style="display:flex; gap:24px; align-items:flex-start; margin-bottom:22px;">
-      <div class="item-photo-frame" id="item-photo-frame">
-        <div class="upload-hint"><i class="ti ti-photo" style="font-size:24px;display:block;margin-bottom:6px;"></i>Photo uploads are off for now<br>(Storage needs a paid plan)</div>
-      </div>
-      <div class="field-grid" style="flex:1;">
-        <div><div class="field-label">Norev product #</div><div class="field-val">${p.norevNumber||'—'}</div></div>
-        <div><div class="field-label">MengYi product #</div><div class="field-val">${color.mengyiCode}</div></div>
-        <div><div class="field-label">Motormax item #</div><div class="field-val">${p.motormaxItemNumber||'—'}</div></div>
-        <div><div class="field-label">Scale</div><div class="field-val">${p.scale}</div></div>
-        <div><div class="field-label">Pcs / 外箱</div><div class="field-val">${pack.pcsPerCarton??'—'}</div></div>
-        <div><div class="field-label">外箱 / 百寶箱</div><div class="field-val">${pack.cartonsPerMaster??'—'}</div></div>
-        <div><div class="field-label">Chassis plate</div><div class="field-val" style="font-family:inherit;">${p.specialItems&&p.specialItems.chassisPlate?'Yes':'No'}</div></div>
-        <div><div class="field-label">Booklet / Hologram</div><div class="field-val" style="font-family:inherit;">${[p.specialItems&&p.specialItems.booklet?'Booklet':null, p.specialItems&&p.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'—'}</div></div>
+    <div class="phase-block">
+      <div class="phase-header"><div class="stamp-circle ${tp.done===tp.total?'complete':tp.done>0?'partial':''}">${tp.done===tp.total?'<i class="ti ti-check"></i>':tp.done+'/'+tp.total}</div> Tooling tasks — shared by all colours of ${model.mengyiBaseNumber}</div>
+      <div class="phase-tasks">
+        ${TOOLING_TASKS.map(t=>toolingTaskRowHTML(model, t)).join('')}
       </div>
     </div>
-    <div class="section-title">Packaging structure</div>
-    <p style="font-size:13px;color:var(--ink-soft);">Polyfoam box → closed/window box → 外箱 (${pack.pcsPerCarton??'?'} pcs) → 百寶箱${pack.cartonsPerMaster?(' ('+pack.cartonsPerMaster+' 外箱, '+pack.pcsPerMaster+' pcs total)'):''}.</p>
+    ${siblings.length?`<p style="font-size:12.5px;color:var(--ink-soft);">Also shares this tooling: ${siblings.map(s=>s.mengyiCode).join(', ')}</p>`:''}
 
-    <div class="section-title" style="margin-top:22px;">Shipment split — export vs domestic</div>
-    <div class="phase-block" style="padding:14px 18px;">
-      <div style="display:flex; gap:16px; align-items:flex-end;">
-        <div class="form-group"><label>Export qty</label><input id="qty-export" type="number" value="${color.exportQty??''}" style="width:140px;" ${editable?'':'disabled'}></div>
-        <div class="form-group"><label>Domestic qty</label><input id="qty-domestic" type="number" value="${color.domesticQty??''}" style="width:140px;" ${editable?'':'disabled'}></div>
-        ${editable?`<button class="btn btn-sm" id="qty-save">Save</button>`:''}
-        ${p.qty?`<span class="chip">PO total: ${p.qty}</span>`:''}
-      </div>
-    </div>
-
-    <div class="section-title" style="margin-top:22px;">Tooling location tracking</div>
+    <div class="section-title" style="margin-top:20px;">Tooling location tracking</div>
     <div class="phase-block" style="padding:14px 18px;">
       ${toolingLog.length?`
         <table class="packing-table" style="margin-bottom:12px;">
@@ -1242,24 +1201,109 @@ function renderItemDetail(main){
           <button class="btn btn-sm" id="tool-add">Add entry</button>
         </div>` : ''}
     </div>
+
+    <div class="section-title" style="margin-top:20px;">Model settings</div>
+    <div class="phase-block" style="padding:14px 18px;">
+      <div class="form-grid">
+        <div class="form-group"><label>Model name</label><input id="model-name" value="${model.modelName||''}" ${editable?'':'disabled'}></div>
+        <div class="form-group"><label>Scale</label>
+          <select id="model-scale" ${editable?'':'disabled'}>
+            <option value="1:12" ${model.scale==='1:12'?'selected':''}>1:12</option>
+            <option value="1:18" ${model.scale==='1:18'?'selected':''}>1:18</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="model-chassis" ${model.specialItems&&model.specialItems.chassisPlate?'checked':''} ${editable?'':'disabled'}> Chassis plate</label>
+            <label><input type="checkbox" id="model-booklet" ${model.specialItems&&model.specialItems.booklet?'checked':''} ${editable?'':'disabled'}> Booklet</label>
+            <label><input type="checkbox" id="model-holo" ${model.specialItems&&model.specialItems.hologram?'checked':''} ${editable?'':'disabled'}> Hologram sticker</label>
+          </div>
+        </div>
+      </div>
+      ${editable?`<button class="btn btn-sm" id="model-save" style="margin-top:10px;">Save model settings</button>`:''}
+    </div>
   `;
-  document.getElementById('back-btn').addEventListener('click', ()=>{ state.activeColorLetter=null; render(); });
-  const qtySaveBtn = document.getElementById('qty-save');
-  if(qtySaveBtn) qtySaveBtn.addEventListener('click', async ()=>{
-    if(!requireEdit(p)) return;
-    const exportQty = Number(document.getElementById('qty-export').value)||null;
-    const domesticQty = Number(document.getElementById('qty-domestic').value)||null;
-    await saveColorPatch(p, color.letter, { exportQty, domesticQty });
+  tc.querySelectorAll('[data-action="tooling-toggle"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const tid = el.closest('.task-row').dataset.tid;
+      const rec = (model.toolingTasks && model.toolingTasks[tid]) || {};
+      const newDone = !rec.done;
+      await db.collection('models').doc(model.id).update({
+        [`toolingTasks.${tid}.done`]: newDone,
+        [`toolingTasks.${tid}.doneBy`]: newDone ? state.currentUser.name : null,
+        [`toolingTasks.${tid}.doneDate`]: newDone ? new Date().toISOString() : null,
+      });
+    });
+  });
+  tc.querySelectorAll('[data-action="tooling-setdate"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const tid = el.closest('.task-row').dataset.tid;
+      const val = prompt('Received date (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+      if(!val) return;
+      await db.collection('models').doc(model.id).update({ [`toolingTasks.${tid}.receivedDate`]: val });
+    });
   });
   const toolAddBtn = document.getElementById('tool-add');
   if(toolAddBtn) toolAddBtn.addEventListener('click', async ()=>{
-    if(!requireEdit(p)) return;
     const date = document.getElementById('tool-date').value;
     const direction = document.getElementById('tool-direction').value;
     const location = document.getElementById('tool-location').value.trim();
     if(!date || !location){ alert('Please enter both a date and a location.'); return; }
     const entry = { date, direction, location, loggedBy: state.currentUser.name };
-    await saveColorPatch(p, color.letter, { toolingLog: [...toolingLog, entry] });
+    await db.collection('models').doc(model.id).update({ toolingLog: [...toolingLog, entry] });
+  });
+  const modelSaveBtn = document.getElementById('model-save');
+  if(modelSaveBtn) modelSaveBtn.addEventListener('click', async ()=>{
+    await db.collection('models').doc(model.id).update({
+      modelName: document.getElementById('model-name').value.trim(),
+      scale: document.getElementById('model-scale').value,
+      specialItems: {
+        chassisPlate: document.getElementById('model-chassis').checked,
+        booklet: document.getElementById('model-booklet').checked,
+        hologram: document.getElementById('model-holo').checked,
+      },
+    });
+  });
+}
+function toolingTaskRowHTML(model, t){
+  const rec = (model.toolingTasks && model.toolingTasks[t.id]) || {};
+  const done = !!rec.done;
+  return `
+    <div class="task-row" data-tid="${t.id}">
+      <div class="task-check ${done?'done':''}" data-action="tooling-toggle">${done?'<i class="ti ti-check" style="font-size:13px;"></i>':''}</div>
+      <div style="flex:1;">
+        <div class="task-text ${done?'done':''}">${t.text}</div>
+        <div class="task-meta">
+          <span>${done?('✓ '+(rec.doneBy||'')+' on '+(rec.doneDate?new Date(rec.doneDate).toLocaleDateString():'—')):'Not marked done'}</span>
+          ${t.rd?`<span>${rec.receivedDate?('Received '+new Date(rec.receivedDate).toLocaleDateString()):'No received date logged'}</span> <button data-action="tooling-setdate">Log date</button>`:''}
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Packing tab (model-level, shared) ---------- */
+function renderPackingTab(tc, model){
+  if(!model){ tc.innerHTML = `<div class="empty-state"><i class="ti ti-alert-triangle"></i>No linked model found.</div>`; return; }
+  const pack = packingFor(model);
+  const editable = canEditModel();
+  tc.innerHTML = `
+    <table class="packing-table">
+      <tr><th>Scale</th><th>Pcs / 外箱</th><th>外箱 / 百寶箱</th><th>Pcs / 百寶箱</th></tr>
+      <tr>
+        <td class="mono">${model.scale}</td>
+        <td><input id="pk-pcs" type="number" value="${pack.pcsPerCarton??''}" ${editable?'':'disabled'}></td>
+        <td><input id="pk-cartons" type="number" value="${pack.cartonsPerMaster??''}" ${editable?'':'disabled'}></td>
+        <td class="mono">${pack.pcsPerMaster??'—'}</td>
+      </tr>
+    </table>
+    <p style="color:var(--ink-soft);font-size:12.5px;margin-top:10px;">Packed in polyfoam box, then closed/window box, then 外箱, then 百寶箱. Shared by every colour of this model.</p>
+    ${editable?`<button class="btn btn-sm" id="pk-save" style="margin-top:8px;">Save packing</button>`:''}
+  `;
+  const pkSave = document.getElementById('pk-save');
+  if(pkSave) pkSave.addEventListener('click', async ()=>{
+    const pcs = Number(document.getElementById('pk-pcs').value)||null;
+    const cartons = Number(document.getElementById('pk-cartons').value)||null;
+    await db.collection('models').doc(model.id).update({ packing: { pcsPerCarton:pcs, cartonsPerMaster:cartons } });
   });
 }
 </script>
