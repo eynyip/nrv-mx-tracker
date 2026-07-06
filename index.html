@@ -286,7 +286,20 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 .form-group input:focus, .form-group select:focus{outline:none; border-color:var(--steel);}
 .checkbox-row{display:flex; gap:18px; align-items:center; margin-top:4px;}
 .checkbox-row label{display:flex; align-items:center; gap:6px; font-size:13px; font-weight:400; color:var(--ink);}
-.color-input-row{display:flex; gap:8px; align-items:center; margin-bottom:8px;}
+.color-grid-header, .color-grid-row{
+  display:grid; grid-template-columns: 64px 1fr 130px 150px 40px; gap:12px; align-items:center;
+}
+.color-grid-header{
+  padding:0 2px 8px; border-bottom:1px solid var(--line); margin-bottom:8px;
+  font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft);
+}
+.color-grid-row{padding:6px 2px; margin-bottom:6px;}
+.color-grid-row input{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius);
+  font-size:14px; background:var(--paper-raised);
+}
+.color-grid-row input:focus{outline:none; border-color:var(--steel);}
+.color-grid-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:13.5px; color:var(--steel);}
 .color-input-row input{flex:1;}
 .color-input-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--steel); width:90px;}
 
@@ -1125,23 +1138,17 @@ function renderPoForm(main, existing){
     function baseVal(){ return document.getElementById('f-mengyi').value || '####'; }
     function paintRows(){
       box.innerHTML = `
-        <table class="packing-table" style="width:100%; max-width:600px; table-layout:fixed;">
-          <tr>
-            <th style="width:70px;">Letter</th>
-            <th style="width:180px;">Colour name</th>
-            <th style="width:120px;">Item code</th>
-            <th style="width:140px;">Norev #</th>
-            <th style="width:40px;"></th>
-          </tr>
-          ${colorRows.map((c,i)=>`
-          <tr class="color-input-row" data-idx="${i}">
-            <td><input style="width:100%;" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A"></td>
-            <td><input style="width:100%;" value="${c.name}" data-field="name" placeholder="e.g. Red"></td>
-            <td class="mono" data-preview>N${c.letter||'x'}${baseVal()}</td>
-            <td><input style="width:100%;" value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456"></td>
-            <td>${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}</td>
-          </tr>`).join('')}
-        </table>`;
+        <div class="color-grid-header">
+          <div>Letter</div><div>Colour name</div><div>Item code</div><div>Norev #</div><div></div>
+        </div>
+        ${colorRows.map((c,i)=>`
+        <div class="color-grid-row color-input-row" data-idx="${i}">
+          <input value="${c.letter}" data-field="letter" maxlength="1" placeholder="A">
+          <input value="${c.name}" data-field="name" placeholder="e.g. Red">
+          <span class="code-preview" data-preview>N${c.letter||'x'}${baseVal()}</span>
+          <input value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456">
+          <div>${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}</div>
+        </div>`).join('')}`;
     }
     paintRows();
     box.addEventListener('input', (e)=>{
