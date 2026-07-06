@@ -507,6 +507,7 @@ let state = {
   editingPoId: null,
   outstandingFilterPM: '',
   outstandingFilterItem: '',
+  outstandingFilterPONum: '',
 };
 
 /* ============================================================
@@ -717,12 +718,16 @@ function renderDashboard(main){
   const inProduction = state.pos.filter(po=>['PO & pre-production','Packaging & pre-shipment'].includes(currentPhaseLabel(po))).length;
   const pmOptions = [...new Set(state.pos.map(po=>po.motormaxPM).filter(Boolean))];
   const itemOptions = [...new Set(state.pos.map(po=>po.mengyiCode).filter(Boolean))];
+  const poNumOptions = [...new Set(state.pos.map(po=>po.poNumber).filter(Boolean))];
   let outstanding = allOutstanding();
   if(state.outstandingFilterPM) outstanding = outstanding.filter(t=>{
     const po = state.pos.find(x=>x.id===t.poId); return po && po.motormaxPM===state.outstandingFilterPM;
   });
   if(state.outstandingFilterItem) outstanding = outstanding.filter(t=>{
     const po = state.pos.find(x=>x.id===t.poId); return po && po.mengyiCode===state.outstandingFilterItem;
+  });
+  if(state.outstandingFilterPONum) outstanding = outstanding.filter(t=>{
+    const po = state.pos.find(x=>x.id===t.poId); return po && po.poNumber===state.outstandingFilterPONum;
   });
   main.innerHTML = `
     <div class="page-head"><h2>Dashboard</h2></div>
@@ -744,6 +749,10 @@ function renderDashboard(main){
         <option value="">All items</option>
         ${itemOptions.map(code=>`<option value="${code}" ${state.outstandingFilterItem===code?'selected':''}>${code}</option>`).join('')}
       </select>
+      <select id="filter-ponum" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All PO numbers</option>
+        ${poNumOptions.map(n=>`<option value="${n}" ${state.outstandingFilterPONum===n?'selected':''}>PO ${n}</option>`).join('')}
+      </select>
     </div>
     <div class="list-table" id="dash-outstanding"></div>
   `;
@@ -760,6 +769,7 @@ function renderDashboard(main){
   attachOutstandingEvents(dOut);
   document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
+  document.getElementById('filter-ponum').addEventListener('change', (e)=>{ state.outstandingFilterPONum = e.target.value; render(); });
 }
 function poCardHTML(po){
   const model = modelFor(po);
@@ -817,21 +827,33 @@ function renderPosList(main){
   const list = document.getElementById('po-list');
   if(!state.pos.length){
     list.innerHTML = `<div class="empty-state"><i class="ti ti-folder-plus"></i>No POs yet.</div>`;
-  } else {
-    list.innerHTML = state.pos.map(po=>poCardHTML(po)).join('');
-    attachPoCardEvents(list);
+    return;
   }
+  // Group by PO Number so colours bundled under the same PO show together,
+  // each still tracked with its own independent manufacturing status.
+  const groups = {};
+  state.pos.forEach(po=>{
+    const key = po.poNumber || '— No PO number yet —';
+    (groups[key] = groups[key] || []).push(po);
+  });
+  list.innerHTML = Object.entries(groups).map(([poNum, items])=>`
+    <div class="section-title">PO ${poNum} <span class="chip">${items.length} colour${items.length>1?'s':''}</span></div>
+    <div style="margin-bottom:18px;">${items.map(po=>poCardHTML(po)).join('')}</div>
+  `).join('');
+  attachPoCardEvents(list);
 }
 
 /* ---------- Outstanding tasks (full) — grouped by PO first ---------- */
 function renderOutstanding(main){
   const pmOptions = [...new Set(state.pos.map(po=>po.motormaxPM).filter(Boolean))];
   const itemOptions = [...new Set(state.pos.map(po=>po.mengyiCode).filter(Boolean))];
+  const poNumOptions = [...new Set(state.pos.map(po=>po.poNumber).filter(Boolean))];
   let groups = state.pos
     .map(po=>({po, tasks:outstandingForPo(po)}))
     .filter(g=>g.tasks.length);
   if(state.outstandingFilterPM) groups = groups.filter(g=>g.po.motormaxPM===state.outstandingFilterPM);
   if(state.outstandingFilterItem) groups = groups.filter(g=>g.po.mengyiCode===state.outstandingFilterItem);
+  if(state.outstandingFilterPONum) groups = groups.filter(g=>g.po.poNumber===state.outstandingFilterPONum);
   groups.sort((a,b)=> (b.tasks.some(t=>t.urgent)?1:0) - (a.tasks.some(t=>t.urgent)?1:0));
 
   const toolingGroups = state.models
@@ -848,6 +870,10 @@ function renderOutstanding(main){
       <select id="filter-item" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
         <option value="">All items</option>
         ${itemOptions.map(code=>`<option value="${code}" ${state.outstandingFilterItem===code?'selected':''}>${code}</option>`).join('')}
+      </select>
+      <select id="filter-ponum" style="padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);">
+        <option value="">All PO numbers</option>
+        ${poNumOptions.map(n=>`<option value="${n}" ${state.outstandingFilterPONum===n?'selected':''}>PO ${n}</option>`).join('')}
       </select>
     </div>
     ${toolingGroups.length?`
@@ -867,6 +893,7 @@ function renderOutstanding(main){
   attachOutstandingEvents(main);
   document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
+  document.getElementById('filter-ponum').addEventListener('change', (e)=>{ state.outstandingFilterPONum = e.target.value; render(); });
 }
 
 /* ---------- New / Edit PO form ---------- */
