@@ -1076,7 +1076,7 @@ function renderPoForm(main, existing){
         `:``}
         ${!isEdit?`
         <div class="form-group full">
-          <label>Colours — Motormax item #, PM and PO Number above are shared by all; everything below (including ship week, once known) is per-colour</label>
+          <label>Colours — Motormax item #, PM and PO Number above are shared by all; quantities and ship week are added later once the PO comes in (via Edit)</label>
           <div id="color-rows"></div>
           <button class="btn btn-sm" id="add-color-row" type="button"><i class="ti ti-plus"></i> Add colour</button>
         </div>
@@ -1120,32 +1120,17 @@ function renderPoForm(main, existing){
     document.getElementById('f-color-letter').addEventListener('input', refreshCodePreview);
   } else {
     // Batch colour rows — event delegation so typing never loses focus.
-    let colorRows = [{letter:'A', name:'', norev:'', qty:'', exportQty:'', domesticQty:'', wk:'', yr:''}];
+    let colorRows = [{letter:'A', name:'', norev:''}];
     const box = document.getElementById('color-rows');
     function baseVal(){ return document.getElementById('f-mengyi').value || '####'; }
-    function rowEtaPreview(c){
-      const wk = Number(c.wk), yr = Number(c.yr);
-      if(wk>=1 && wk<=53 && yr){
-        const { monday, sunday } = isoWeekToDates(yr, wk);
-        return `${fmtDate(monday.toISOString())}–${fmtDate(sunday.toISOString())}`;
-      }
-      return 'ship week unknown yet';
-    }
     function paintRows(){
       box.innerHTML = `
-        <div style="overflow-x:auto;">
-        <table class="packing-table" style="min-width:900px; width:100%; table-layout:fixed;">
+        <table class="packing-table" style="width:100%; max-width:600px; table-layout:fixed;">
           <tr>
-            <th style="width:55px;">Letter</th>
-            <th style="width:150px;">Colour name</th>
-            <th style="width:110px;">Item code</th>
-            <th style="width:110px;">Norev #</th>
-            <th style="width:80px;">Qty</th>
-            <th style="width:95px;">Export qty</th>
-            <th style="width:105px;">Domestic qty</th>
-            <th style="width:80px;">Ship wk</th>
-            <th style="width:80px;">Year</th>
-            <th style="width:150px;">Ship dates</th>
+            <th style="width:70px;">Letter</th>
+            <th style="width:180px;">Colour name</th>
+            <th style="width:120px;">Item code</th>
+            <th style="width:140px;">Norev #</th>
             <th style="width:40px;"></th>
           </tr>
           ${colorRows.map((c,i)=>`
@@ -1154,16 +1139,9 @@ function renderPoForm(main, existing){
             <td><input style="width:100%;" value="${c.name}" data-field="name" placeholder="e.g. Red"></td>
             <td class="mono" data-preview>N${c.letter||'x'}${baseVal()}</td>
             <td><input style="width:100%;" value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456"></td>
-            <td><input style="width:100%;" value="${c.qty}" data-field="qty" type="number" placeholder="0"></td>
-            <td><input style="width:100%;" value="${c.exportQty}" data-field="exportQty" type="number" placeholder="0"></td>
-            <td><input style="width:100%;" value="${c.domesticQty}" data-field="domesticQty" type="number" placeholder="0"></td>
-            <td><input style="width:100%;" value="${c.wk}" data-field="wk" type="number" min="1" max="53" placeholder="1-53"></td>
-            <td><input style="width:100%;" value="${c.yr}" data-field="yr" type="number" placeholder="2026"></td>
-            <td style="color:var(--ink-soft); font-size:12px;" data-eta-preview>${rowEtaPreview(c)}</td>
             <td>${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}</td>
           </tr>`).join('')}
-        </table>
-        </div>`;
+        </table>`;
     }
     paintRows();
     box.addEventListener('input', (e)=>{
@@ -1177,9 +1155,6 @@ function renderPoForm(main, existing){
         row.querySelector('[data-preview]').textContent = `N${upper||'x'}${baseVal()}`;
       } else {
         colorRows[idx][field] = e.target.value;
-      }
-      if(field==='wk' || field==='yr'){
-        row.querySelector('[data-eta-preview]').textContent = rowEtaPreview(colorRows[idx]);
       }
     });
     box.addEventListener('click', (e)=>{
@@ -1195,7 +1170,7 @@ function renderPoForm(main, existing){
     });
     document.getElementById('add-color-row').addEventListener('click', ()=>{
       const nextLetter = String.fromCharCode(65 + colorRows.length);
-      colorRows.push({letter:nextLetter, name:'', norev:'', qty:'', exportQty:'', domesticQty:'', wk:'', yr:''});
+      colorRows.push({letter:nextLetter, name:'', norev:''});
       paintRows();
     });
     main._colorRows = ()=>colorRows;
@@ -1286,21 +1261,18 @@ function renderPoForm(main, existing){
       if(!rows.length){ alert('Please add at least one colour.'); return; }
       let lastId = null;
       for(const c of rows){
-        const wk = Number(c.wk)||null;
-        const yr = Number(c.yr)||null;
-        const estShipDate = (wk && yr) ? isoWeekToDates(yr, wk).monday.toISOString().slice(0,10) : null;
         const po = {
           ...shared,
           colorLetter: c.letter,
           colorName: c.name,
           mengyiCode: `N${c.letter}${base}`,
           norevNumber: c.norev,
-          qty: Number(c.qty)||null,
-          exportQty: Number(c.exportQty)||null,
-          domesticQty: Number(c.domesticQty)||null,
-          estShipWeekNum: wk,
-          estShipYear: yr,
-          estShipDate,
+          qty: null,
+          exportQty: null,
+          domesticQty: null,
+          estShipWeekNum: null,
+          estShipYear: null,
+          estShipDate: null,
           tasks: {},
           createdAt: Date.now(),
           createdByName: state.currentUser.name,
