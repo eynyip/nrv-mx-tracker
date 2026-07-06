@@ -1134,32 +1134,32 @@ function renderPoForm(main, existing){
     function paintRows(){
       box.innerHTML = `
         <div style="overflow-x:auto;">
-        <table class="packing-table" style="min-width:820px;">
+        <table class="packing-table" style="min-width:900px; width:100%; table-layout:fixed;">
           <tr>
             <th style="width:55px;">Letter</th>
-            <th style="width:140px;">Colour name</th>
-            <th style="width:100px;">Item code</th>
+            <th style="width:150px;">Colour name</th>
+            <th style="width:110px;">Item code</th>
             <th style="width:110px;">Norev #</th>
             <th style="width:80px;">Qty</th>
-            <th style="width:90px;">Export qty</th>
-            <th style="width:100px;">Domestic qty</th>
+            <th style="width:95px;">Export qty</th>
+            <th style="width:105px;">Domestic qty</th>
             <th style="width:80px;">Ship wk</th>
             <th style="width:80px;">Year</th>
-            <th>Ship dates</th>
-            <th style="width:36px;"></th>
+            <th style="width:150px;">Ship dates</th>
+            <th style="width:40px;"></th>
           </tr>
           ${colorRows.map((c,i)=>`
           <tr class="color-input-row" data-idx="${i}">
-            <td><input style="width:45px;" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A"></td>
-            <td><input style="width:130px;" value="${c.name}" data-field="name" placeholder="e.g. Red"></td>
+            <td><input style="width:100%;" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A"></td>
+            <td><input style="width:100%;" value="${c.name}" data-field="name" placeholder="e.g. Red"></td>
             <td class="mono" data-preview>N${c.letter||'x'}${baseVal()}</td>
-            <td><input style="width:100px;" value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456"></td>
-            <td><input style="width:70px;" value="${c.qty}" data-field="qty" type="number" placeholder="0"></td>
-            <td><input style="width:80px;" value="${c.exportQty}" data-field="exportQty" type="number" placeholder="0"></td>
-            <td><input style="width:90px;" value="${c.domesticQty}" data-field="domesticQty" type="number" placeholder="0"></td>
-            <td><input style="width:70px;" value="${c.wk}" data-field="wk" type="number" min="1" max="53" placeholder="1-53"></td>
-            <td><input style="width:70px;" value="${c.yr}" data-field="yr" type="number" placeholder="2026"></td>
-            <td style="color:var(--ink-soft); font-size:12px; white-space:nowrap;" data-eta-preview>${rowEtaPreview(c)}</td>
+            <td><input style="width:100%;" value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456"></td>
+            <td><input style="width:100%;" value="${c.qty}" data-field="qty" type="number" placeholder="0"></td>
+            <td><input style="width:100%;" value="${c.exportQty}" data-field="exportQty" type="number" placeholder="0"></td>
+            <td><input style="width:100%;" value="${c.domesticQty}" data-field="domesticQty" type="number" placeholder="0"></td>
+            <td><input style="width:100%;" value="${c.wk}" data-field="wk" type="number" min="1" max="53" placeholder="1-53"></td>
+            <td><input style="width:100%;" value="${c.yr}" data-field="yr" type="number" placeholder="2026"></td>
+            <td style="color:var(--ink-soft); font-size:12px;" data-eta-preview>${rowEtaPreview(c)}</td>
             <td>${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}</td>
           </tr>`).join('')}
         </table>
