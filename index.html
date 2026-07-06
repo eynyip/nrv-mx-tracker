@@ -74,48 +74,61 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 #login-screen{
   min-height:100vh; display:flex; align-items:center; justify-content:center;
   background:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px),
-    var(--paper);
-  background-size:28px 28px;
+    radial-gradient(circle at 20% 15%, rgba(61,90,128,.10), transparent 55%),
+    radial-gradient(circle at 85% 85%, rgba(201,122,44,.08), transparent 50%),
+    linear-gradient(160deg, #EDEFEA 0%, var(--paper) 60%);
 }
 .login-card{
   background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius);
-  padding:40px 36px; width:360px; box-shadow:0 2px 0 var(--line);
+  width:380px; overflow:hidden;
+  box-shadow:0 12px 32px rgba(27,36,48,.10), 0 2px 0 var(--line);
 }
-.login-brand{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+.login-header{
+  background:var(--ink); color:#fff; padding:30px 32px 24px;
+  position:relative;
+}
+.login-header::after{
+  content:''; position:absolute; left:0; right:0; bottom:0; height:3px;
+  background:linear-gradient(90deg, var(--steel), var(--amber));
+}
+.login-brand{display:flex; align-items:center; gap:12px; margin-bottom:4px;}
 .login-brand .stamp{
-  width:34px;height:34px;border-radius:50%;border:2px solid var(--steel);
-  display:flex;align-items:center;justify-content:center;color:var(--steel);font-weight:700;font-size:13px;
-  transform:rotate(-8deg);
+  width:38px;height:38px;border-radius:50%;border:2px solid var(--amber);
+  display:flex;align-items:center;justify-content:center;color:var(--amber);font-weight:700;font-size:14px;
+  transform:rotate(-8deg); flex-shrink:0;
 }
-.login-brand h1{font-size:18px; margin:0;}
-.login-sub{color:var(--ink-soft); font-size:12.5px; margin:0 0 26px;}
-.user-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
+.login-brand h1{font-size:19px; margin:0; color:#fff;}
+.login-tagline{font-size:11px; color:#8DA3BC; text-transform:uppercase; letter-spacing:.06em; margin:2px 0 0 50px;}
+.login-body{padding:30px 32px 34px;}
+.login-sub{color:var(--ink-soft); font-size:12.5px; margin:0 0 20px;}
+.user-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:22px;}
 .user-tile{
   border:1px solid var(--line); border-radius:var(--radius); padding:14px 10px; text-align:center;
   background:var(--paper); transition:.12s;
 }
-.user-tile:hover{border-color:var(--steel); background:var(--steel-dim);}
-.user-tile.active{border-color:var(--steel); background:var(--steel-dim); box-shadow:inset 0 0 0 1px var(--steel);}
+.user-tile:hover{border-color:var(--steel); background:var(--steel-dim); transform:translateY(-1px);}
+.user-tile.active{border-color:var(--steel); background:var(--steel-dim); box-shadow:inset 0 0 0 1.5px var(--steel);}
 .user-tile .initials{
-  width:36px;height:36px;border-radius:50%;background:var(--ink);color:#fff;display:flex;
+  width:36px;height:36px;border-radius:50%;background:var(--steel);color:#fff;display:flex;
   align-items:center;justify-content:center;font-size:13px;font-weight:600;margin:0 auto 8px;
 }
-.pin-row{display:flex; gap:8px; margin-bottom:14px;}
+.pin-row{display:flex; gap:8px; margin-bottom:16px;}
 .pin-dot{
-  flex:1; height:44px; border:1px solid var(--line); border-radius:var(--radius);
-  display:flex; align-items:center; justify-content:center; font-size:20px; background:var(--paper);
-  font-family:'IBM Plex Mono',monospace;
+  flex:1; height:46px; border:1.5px solid var(--line); border-radius:var(--radius);
+  display:flex; align-items:center; justify-content:center; font-size:22px; background:var(--paper);
+  font-family:'IBM Plex Mono',monospace; transition:.12s;
 }
+.pin-dot.filled{border-color:var(--steel); background:var(--steel-dim); color:var(--steel);}
 .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
 .key{
-  padding:12px 0; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-raised);
-  font-size:16px; font-family:'IBM Plex Mono',monospace;
+  padding:13px 0; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-raised);
+  font-size:16px; font-family:'IBM Plex Mono',monospace; transition:.12s;
 }
 .key:hover{background:var(--steel-dim); border-color:var(--steel);}
-.key.wide{grid-column:span 1;}
-.login-error{color:var(--red); font-size:12.5px; text-align:center; margin-top:10px; min-height:16px;}
+.key.key-ok{background:var(--amber); border-color:var(--amber); color:#fff; font-weight:600; font-family:'IBM Plex Sans',sans-serif; font-size:13px;}
+.key.key-ok:hover{background:#B5691F; border-color:#B5691F;}
+.key.key-back{color:var(--ink-soft); font-size:15px;}
+.login-error{color:var(--red); font-size:12.5px; text-align:center; margin-top:12px; min-height:16px;}
 
 /* ---------- App shell ---------- */
 #app{display:none; min-height:100vh; grid-template-columns:220px 1fr;}
@@ -294,13 +307,18 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 <!-- ===================== LOGIN ===================== -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-brand"><div class="stamp">MM</div><h1>Motormax Tracker</h1></div>
-    <p class="login-sub">Select your name, then enter your 4-digit PIN.</p>
-    <div class="user-grid" id="user-grid"></div>
-    <div id="pin-section" style="display:none;">
-      <div class="pin-row" id="pin-row"></div>
-      <div class="keypad" id="keypad"></div>
-      <div class="login-error" id="login-error"></div>
+    <div class="login-header">
+      <div class="login-brand"><div class="stamp">MM</div><h1>Motormax Tracker</h1></div>
+      <div class="login-tagline">Norev OEM Project Tracker</div>
+    </div>
+    <div class="login-body">
+      <p class="login-sub">Select your name, then enter your 4-digit PIN.</p>
+      <div class="user-grid" id="user-grid"></div>
+      <div id="pin-section" style="display:none;">
+        <div class="pin-row" id="pin-row"></div>
+        <div class="keypad" id="keypad"></div>
+        <div class="login-error" id="login-error"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -565,7 +583,7 @@ function renderPinRow(){
   row.innerHTML = '';
   for(let i=0;i<4;i++){
     const dot = document.createElement('div');
-    dot.className = 'pin-dot';
+    dot.className = 'pin-dot' + (state.pinBuffer[i] ? ' filled' : '');
     dot.textContent = state.pinBuffer[i] ? '•' : '';
     row.appendChild(dot);
   }
@@ -573,7 +591,10 @@ function renderPinRow(){
 function renderKeypad(){
   const pad = document.getElementById('keypad');
   const keys = ['1','2','3','4','5','6','7','8','9','⌫','0','OK'];
-  pad.innerHTML = keys.map(k=>`<div class="key" data-key="${k}">${k}</div>`).join('');
+  pad.innerHTML = keys.map(k=>{
+    const cls = k==='OK' ? 'key key-ok' : k==='⌫' ? 'key key-back' : 'key';
+    return `<div class="${cls}" data-key="${k}">${k}</div>`;
+  }).join('');
   pad.querySelectorAll('.key').forEach(el=>{
     el.addEventListener('click', ()=>handleKey(el.dataset.key));
   });
