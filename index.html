@@ -275,7 +275,7 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 .packing-table input{width:70px; padding:5px 7px; border:1px solid var(--line); border-radius:4px;}
 
 /* form */
-.form-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:24px; max-width:760px;}
+.form-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:24px; max-width:1100px;}
 .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
 .form-group{margin-bottom:4px;}
 .form-group.full{grid-column:1/-1;}
@@ -1132,20 +1132,38 @@ function renderPoForm(main, existing){
       return 'ship week unknown yet';
     }
     function paintRows(){
-      box.innerHTML = colorRows.map((c,i)=>`
-        <div class="color-input-row" data-idx="${i}" style="flex-wrap:wrap;">
-          <input style="max-width:50px" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A">
-          <input style="max-width:120px" value="${c.name}" data-field="name" placeholder="Colour name">
-          <span class="code-preview" data-preview>N${c.letter||'x'}${baseVal()}</span>
-          <input style="max-width:110px" value="${c.norev}" data-field="norev" maxlength="6" placeholder="Norev #">
-          <input style="max-width:90px" value="${c.qty}" data-field="qty" type="number" placeholder="Qty">
-          <input style="max-width:90px" value="${c.exportQty}" data-field="exportQty" type="number" placeholder="Export qty">
-          <input style="max-width:90px" value="${c.domesticQty}" data-field="domesticQty" type="number" placeholder="Domestic qty">
-          <input style="max-width:70px" value="${c.wk}" data-field="wk" type="number" min="1" max="53" placeholder="Ship wk">
-          <input style="max-width:80px" value="${c.yr}" data-field="yr" type="number" placeholder="Year">
-          <span class="code-preview" data-eta-preview style="color:var(--ink-soft);">${rowEtaPreview(c)}</span>
-          ${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}
-        </div>`).join('');
+      box.innerHTML = `
+        <div style="overflow-x:auto;">
+        <table class="packing-table" style="min-width:820px;">
+          <tr>
+            <th style="width:55px;">Letter</th>
+            <th style="width:140px;">Colour name</th>
+            <th style="width:100px;">Item code</th>
+            <th style="width:110px;">Norev #</th>
+            <th style="width:80px;">Qty</th>
+            <th style="width:90px;">Export qty</th>
+            <th style="width:100px;">Domestic qty</th>
+            <th style="width:80px;">Ship wk</th>
+            <th style="width:80px;">Year</th>
+            <th>Ship dates</th>
+            <th style="width:36px;"></th>
+          </tr>
+          ${colorRows.map((c,i)=>`
+          <tr class="color-input-row" data-idx="${i}">
+            <td><input style="width:45px;" value="${c.letter}" data-field="letter" maxlength="1" placeholder="A"></td>
+            <td><input style="width:130px;" value="${c.name}" data-field="name" placeholder="e.g. Red"></td>
+            <td class="mono" data-preview>N${c.letter||'x'}${baseVal()}</td>
+            <td><input style="width:100px;" value="${c.norev}" data-field="norev" maxlength="6" placeholder="123456"></td>
+            <td><input style="width:70px;" value="${c.qty}" data-field="qty" type="number" placeholder="0"></td>
+            <td><input style="width:80px;" value="${c.exportQty}" data-field="exportQty" type="number" placeholder="0"></td>
+            <td><input style="width:90px;" value="${c.domesticQty}" data-field="domesticQty" type="number" placeholder="0"></td>
+            <td><input style="width:70px;" value="${c.wk}" data-field="wk" type="number" min="1" max="53" placeholder="1-53"></td>
+            <td><input style="width:70px;" value="${c.yr}" data-field="yr" type="number" placeholder="2026"></td>
+            <td style="color:var(--ink-soft); font-size:12px; white-space:nowrap;" data-eta-preview>${rowEtaPreview(c)}</td>
+            <td>${colorRows.length>1?`<button class="btn btn-sm btn-ghost remove-color-row" type="button"><i class="ti ti-x"></i></button>`:''}</td>
+          </tr>`).join('')}
+        </table>
+        </div>`;
     }
     paintRows();
     box.addEventListener('input', (e)=>{
