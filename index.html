@@ -921,9 +921,10 @@ function poCardHTML(po){
     <div class="proj-card" data-pid="${po.id}">
       <div class="proj-thumb"><i class="ti ti-photo"></i></div>
       <div class="proj-info">
-        <div class="title">${po.poNumber?('PO '+po.poNumber+' · '):''}${po.mengyiCode||'Untitled'} ${po.colorName?('— '+po.colorName):''}</div>
-        <div class="sub">${model?(model.modelName+' · '+model.scale+' · '):''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}PM: ${po.motormaxPM||'—'} · Tooling ${tp.done}/${tp.total}</div>
+        <div class="title">${po.poNumber||'—'} | ${po.mengyiCode||'—'} | ${model?model.modelName:'—'} | ${po.colorName||'—'}</div>
+        <div class="sub">${model?model.scale+' · ':''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}Tooling ${tp.done}/${tp.total}</div>
       </div>
+      ${po.motormaxPM?`<span class="chip chip-pm"><i class="ti ti-user" style="font-size:12px;"></i> ${po.motormaxPM}</span>`:''}
       <span class="phase-badge">${currentPhaseLabel(po)}</span>
       <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
       <div class="eta-tag ${urgentEta?'urgent':''}" style="width:120px;">${eta}</div>
@@ -1046,17 +1047,12 @@ function renderPoForm(main, existing){
       <div class="form-grid">
         <div class="form-group"><label>MengYi base number (4-digit) <span class="required-mark">*</span></label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
         <div id="model-status" style="grid-column:1/-1; font-size:12.5px; color:var(--ink-soft);"></div>
-        <div class="form-group full">
-          <div class="section-title" style="margin:4px 0 8px;">Item overview — shared by every colour of this base number</div>
-          <div class="form-grid" style="grid-template-columns:1fr 1fr;">
-            <div class="form-group"><label>Item Name <span class="required-mark">*</span></label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
-            <div class="form-group"><label>Scale</label>
-              <select id="f-scale">
-                <option value="1:12" ${existingModel&&existingModel.scale==='1:12'?'selected':''}>1:12</option>
-                <option value="1:18" ${existingModel&&existingModel.scale==='1:18'?'selected':''}>1:18</option>
-              </select>
-            </div>
-          </div>
+        <div class="form-group"><label>Item Name <span class="required-mark">*</span></label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
+        <div class="form-group"><label>Scale <span class="required-mark">*</span></label>
+          <select id="f-scale">
+            <option value="1:12" ${existingModel&&existingModel.scale==='1:12'?'selected':''}>1:12</option>
+            <option value="1:18" ${existingModel&&existingModel.scale==='1:18'?'selected':''}>1:18</option>
+          </select>
         </div>
         ${isEdit?`
         <div class="section-title" style="margin:4px 0 8px; grid-column:1/-1;">This colour / PO</div>
@@ -1076,8 +1072,8 @@ function renderPoForm(main, existing){
           </div>
         </div>
         `:``}
-        <div class="form-group"><label>PO Number ${isEdit?'':'(optional — can add later, applies to all colours below)'}</label><input id="f-po" placeholder="e.g. 2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
-        <div class="form-group"><label>Motormax item # <span class="required-mark">*</span></label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
+        <div class="form-group"><label>PO Number ${isEdit?'':'(optional, can add later)'}</label><input id="f-po" placeholder="e.g. 2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
+        <div class="form-group"><label>Motormax item #</label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
         <div class="form-group"><label>Motormax PM <span class="required-mark">*</span></label>
           <select id="f-pm">${state.users.map(u=>`<option value="${u.name}" ${isEdit&&existing.motormaxPM===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
         </div>
@@ -1254,7 +1250,6 @@ function renderPoForm(main, existing){
       }
     }
     const motormaxItemNum = document.getElementById('f-motormax').value.trim();
-    if(!motormaxItemNum){ alert('Motormax item # is required.'); return; }
     const shared = {
       modelId,
       mengyiBaseNumber: base,
