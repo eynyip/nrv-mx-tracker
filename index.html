@@ -768,6 +768,11 @@ function packingFor(model){
 function render(){
   document.getElementById('outstanding-count').textContent = allOutstanding().length;
   const main = document.getElementById('main');
+  // Guard: if the New/Edit Item form is already open, a live Firestore
+  // update (e.g. from the write we just made ourselves) must NOT rebuild
+  // it — that would silently wipe out anything the person has typed but
+  // not yet saved. The form only ever needs to render once per visit.
+  if(state.view==='new' && document.getElementById('save-po')) return;
   if(state.activePoId){ renderPoDetail(main); return; }
   if(state.view==='dashboard') renderDashboard(main);
   else if(state.view==='projects') renderPosList(main);
@@ -1246,7 +1251,7 @@ function renderPoForm(main, existing){
         };
         const modelRef = await db.collection('models').add(newModel);
         modelId = modelRef.id;
-        state.models.push({ id: modelId, ...newModel }); // avoid race with the async listener
+        if(!state.models.some(m=>m.id===modelId)) state.models.push({ id: modelId, ...newModel }); // avoid race with the async listener
       }
     }
     const motormaxItemNum = document.getElementById('f-motormax').value.trim();
@@ -1310,7 +1315,7 @@ function renderPoForm(main, existing){
           createdByUserId: state.currentUser.id,
         };
         const ref = await db.collection('pos').add(po);
-        state.pos.push({ id: ref.id, ...po }); // avoid race with the async listener
+        if(!state.pos.some(x=>x.id===ref.id)) state.pos.push({ id: ref.id, ...po }); // avoid race with the async listener
         lastId = ref.id;
       }
       state.activePoId = rows.length===1 ? lastId : null;
@@ -1332,7 +1337,7 @@ function renderPoDetail(main){
     <div class="page-head">
       <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> Back</button>
       <h2 style="margin-left:10px;">${po.mengyiCode} ${po.colorName?('— '+po.colorName):''}</h2>
-      ${editable?`<button class="btn btn-sm" id="edit-po-btn"><i class="ti ti-pencil"></i> Edit item</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${po.createdByName||'another PM'}</span>`}
+      ${editable?`<button class="btn btn-sm" id="edit-po-btn"><i class="ti ti-pencil"></i> Edit item</button> <button class="btn btn-sm btn-ghost" id="delete-po-btn" style="color:var(--red);"><i class="ti ti-trash"></i> Delete item</button>`:`<span class="chip" style="margin-left:10px;"><i class="ti ti-lock"></i> View only — created by ${po.createdByName||'another PM'}</span>`}
     </div>
     <div class="detail-head">
       <div class="field-grid">
@@ -1369,6 +1374,16 @@ function renderPoDetail(main){
   document.getElementById('back-btn').addEventListener('click', ()=>{ state.activePoId=null; render(); });
   const editBtn = document.getElementById('edit-po-btn');
   if(editBtn) editBtn.addEventListener('click', ()=>{ state.editingPoId = po.id; state.activePoId = null; state.view='new'; render(); });
+  const deleteBtn = document.getElementById('delete-po-btn');
+  if(deleteBtn) deleteBtn.addEventListener('click', async ()=>{
+    if(!requireEdit(po)) return;
+    if(!confirm(`Delete ${po.mengyiCode}${po.colorName?' — '+po.colorName:''}? This permanently removes this item's workflow, dates, and notes. This cannot be undone.`)) return;
+    await db.collection('pos').doc(po.id).delete();
+    state.pos = state.pos.filter(x=>x.id!==po.id); // avoid race with the async listener
+    state.activePoId = null;
+    state.view = 'projects';
+    render();
+  });
   main.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{ state.detailTab=t.dataset.tab; renderPoDetail(main); }));
   const tc = document.getElementById('tab-content');
   if(state.detailTab==='workflow') renderWorkflowTab(tc, po);
