@@ -226,6 +226,7 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 .task-text.done{text-decoration:line-through; color:var(--ink-soft);}
 .chip{font-size:11px; padding:2px 8px; border-radius:8px; background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);}
 .chip.urgent{background:var(--red-dim); color:var(--red); border-color:var(--red);}
+.chip.chip-pm{background:var(--steel-dim); color:var(--steel); border-color:var(--steel); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
 
 /* project detail */
 .detail-head{
@@ -285,6 +286,7 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 }
 .form-group input:focus, .form-group select:focus{outline:none; border-color:var(--steel);}
 .checkbox-row{display:flex; flex-wrap:wrap; gap:10px 28px; align-items:center; margin-top:4px;}
+.required-mark{color:var(--red); font-weight:700;}
 .checkbox-row label{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400; color:var(--ink); white-space:nowrap;}
 .checkbox-row label input[type="checkbox"]{flex-shrink:0; width:16px; height:16px; margin:0;}
 @media(max-width:900px){
@@ -432,7 +434,8 @@ const TOOLING_TASKS = [
 
 /* PO WORKFLOW — everything else, tracked independently per PO
    (per colour). onlyIf: 'chassisPlate' | 'booklet' | 'hologram'
-   refers to the linked model's specialItems. */
+   refers to the PO's OWN specialItems (these vary per colour, unlike
+   Item Name/Scale which are shared at the model level). */
 const WORKFLOW = [
   { id:'ph1', label:'Phase 1 — Deco list & cost preparation', tasks:[
     { id:'t1_1', text:'Deco list received from customer', rd:true },
@@ -718,17 +721,15 @@ function modelFor(po){ return state.models.find(m=>m.id===po.modelId); }
    ============================================================ */
 function computeProgress(po){
   const tasks = WORKFLOW.flatMap(ph=>ph.tasks.filter(t=>{
-    const model = modelFor(po);
     if(!t.onlyIf) return true;
-    return model && model.specialItems && model.specialItems[t.onlyIf];
+    return po.specialItems && po.specialItems[t.onlyIf];
   }));
   const doneCount = tasks.filter(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done).length;
   return tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
 }
 function currentPhaseLabel(po){
-  const model = modelFor(po);
   for(const ph of WORKFLOW){
-    const relevant = ph.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf]));
+    const relevant = ph.tasks.filter(t=>!t.onlyIf || (po.specialItems && po.specialItems[t.onlyIf]));
     const allDone = relevant.every(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done);
     if(!allDone) return ph.label.replace(/Phase \d+ — /,'');
   }
@@ -740,8 +741,7 @@ function toolingProgress(model){
   return {done, total:TOOLING_TASKS.length};
 }
 function outstandingForPo(po){
-  const model = modelFor(po);
-  return WORKFLOW.flatMap(ph=>ph.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf])).map(t=>({...t, phaseId:ph.id, phaseLabel:ph.label})))
+  return WORKFLOW.flatMap(ph=>ph.tasks.filter(t=>!t.onlyIf || (po.specialItems && po.specialItems[t.onlyIf])).map(t=>({...t, phaseId:ph.id, phaseLabel:ph.label})))
     .filter(t=>!(po.tasks && po.tasks[t.id] && po.tasks[t.id].done))
     .map(t=>{
       let urgent = false;
@@ -749,7 +749,7 @@ function outstandingForPo(po){
         const d = daysUntil(po.estShipDate);
         urgent = d !== null && d <= 30;
       }
-      return {...t, urgent, poId:po.id, poTitle:poTitle(po)};
+      return {...t, urgent, poId:po.id, poTitle:poTitle(po), motormaxPM:po.motormaxPM};
     });
 }
 function allOutstanding(){ return state.pos.flatMap(po=>outstandingForPo(po)); }
@@ -944,6 +944,7 @@ function outstandingRowHTML(t){
       <span class="task-text">${t.text}</span>
       <span class="chip">${t.phaseLabel.replace(/Phase \d+ — /,'')}</span>
       <span class="chip">${t.poTitle}</span>
+      ${t.motormaxPM?`<span class="chip chip-pm"><i class="ti ti-user" style="font-size:12px;"></i> ${t.motormaxPM}</span>`:''}
       ${t.urgent?'<span class="chip urgent">Due soon</span>':''}
       <button class="btn btn-sm btn-ghost open-po">Open</button>
     </div>`;
@@ -1043,25 +1044,17 @@ function renderPoForm(main, existing){
     <div class="page-head"><h2>${isEdit?'Edit Item':'New Item'}</h2></div>
     <div class="form-card">
       <div class="form-grid">
-        <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
+        <div class="form-group"><label>MengYi base number (4-digit) <span class="required-mark">*</span></label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
         <div id="model-status" style="grid-column:1/-1; font-size:12.5px; color:var(--ink-soft);"></div>
         <div class="form-group full">
           <div class="section-title" style="margin:4px 0 8px;">Item overview — shared by every colour of this base number</div>
           <div class="form-grid" style="grid-template-columns:1fr 1fr;">
-            <div class="form-group"><label>Item Name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
+            <div class="form-group"><label>Item Name <span class="required-mark">*</span></label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
             <div class="form-group"><label>Scale</label>
               <select id="f-scale">
                 <option value="1:12" ${existingModel&&existingModel.scale==='1:12'?'selected':''}>1:12</option>
                 <option value="1:18" ${existingModel&&existingModel.scale==='1:18'?'selected':''}>1:18</option>
               </select>
-            </div>
-            <div class="form-group full">
-              <label>Special items</label>
-              <div class="checkbox-row">
-                <label><input type="checkbox" id="f-chassis" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
-                <label><input type="checkbox" id="f-booklet" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.booklet?'checked':''}> Printed booklet</label>
-                <label><input type="checkbox" id="f-holo" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.hologram?'checked':''}> Hologram sticker (customer-provided)</label>
-              </div>
             </div>
           </div>
         </div>
@@ -1074,13 +1067,21 @@ function renderPoForm(main, existing){
         <div class="form-group"><label>Order qty</label><input id="f-qty-single" type="number" placeholder="e.g. 3000" value="${existing.qty?existing.qty:''}"></div>
         <div class="form-group"><label>Export qty 出口數量</label><input id="f-export-single" type="number" value="${existing.exportQty!=null?existing.exportQty:''}"></div>
         <div class="form-group"><label>Domestic qty 內銷數量</label><input id="f-domestic-single" type="number" value="${existing.domesticQty!=null?existing.domesticQty:''}"></div>
+        <div class="form-group full">
+          <label>Special items — specific to this colour</label>
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="f-chassis" ${existing.specialItems&&existing.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
+            <label><input type="checkbox" id="f-booklet" ${existing.specialItems&&existing.specialItems.booklet?'checked':''}> Printed booklet</label>
+            <label><input type="checkbox" id="f-holo" ${existing.specialItems&&existing.specialItems.hologram?'checked':''}> Hologram sticker (customer-provided)</label>
+          </div>
+        </div>
         `:``}
         <div class="form-group"><label>PO Number ${isEdit?'':'(optional — can add later, applies to all colours below)'}</label><input id="f-po" placeholder="e.g. 2026-0417" value="${isEdit?(existing.poNumber||''):''}"></div>
-        <div class="form-group"><label>Motormax item #</label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
-        <div class="form-group"><label>Motormax PM</label>
+        <div class="form-group"><label>Motormax item # <span class="required-mark">*</span></label><input id="f-motormax" placeholder="assigned by Louisa" value="${isEdit?(existing.motormaxItemNumber||''):''}"></div>
+        <div class="form-group"><label>Motormax PM <span class="required-mark">*</span></label>
           <select id="f-pm">${state.users.map(u=>`<option value="${u.name}" ${isEdit&&existing.motormaxPM===u.name?'selected':''}>${u.name}</option>`).join('')}</select>
         </div>
-        <div class="form-group"><label>Norev PM</label>
+        <div class="form-group"><label>Norev PM <span class="required-mark">*</span></label>
           <select id="f-norev-pm">
             ${['Patrice','Ben','Sascha'].map(n=>`<option value="${n}" ${isEdit&&existing.norevPM===n?'selected':''}>${n}</option>`).join('')}
           </select>
@@ -1122,9 +1123,6 @@ function renderPoForm(main, existing){
       if(lastMatchedModelId !== found.id){
         document.getElementById('f-model').value = found.modelName||'';
         document.getElementById('f-scale').value = found.scale||'1:12';
-        document.getElementById('f-chassis').checked = !!(found.specialItems&&found.specialItems.chassisPlate);
-        document.getElementById('f-booklet').checked = !!(found.specialItems&&found.specialItems.booklet);
-        document.getElementById('f-holo').checked = !!(found.specialItems&&found.specialItems.hologram);
         lastMatchedModelId = found.id;
       }
       statusEl.innerHTML = `<span class="chip">Linked to existing item: ${found.modelName} (${found.scale})</span> — editable above; changes apply to every colour sharing base ${base}.`;
@@ -1213,7 +1211,11 @@ function renderPoForm(main, existing){
     document.getElementById('f-eta-week').addEventListener('input', updateEtaPreview);
     document.getElementById('f-eta-year').addEventListener('input', updateEtaPreview);
   }
-  document.getElementById('cancel-po').addEventListener('click', ()=>{ state.editingPoId=null; state.view='dashboard'; render(); });
+  document.getElementById('cancel-po').addEventListener('click', ()=>{
+    if(isEdit){ state.editingPoId=null; state.activePoId=existing.id; state.view='dashboard'; }
+    else { state.editingPoId=null; state.view='dashboard'; }
+    render();
+  });
   document.getElementById('save-po').addEventListener('click', async ()=>{
     if(isEdit && !requireEdit(existing)) return;
     const base = document.getElementById('f-mengyi').value.trim();
@@ -1223,11 +1225,6 @@ function renderPoForm(main, existing){
     const modelFields = {
       modelName,
       scale: document.getElementById('f-scale').value,
-      specialItems: {
-        chassisPlate: document.getElementById('f-chassis').checked,
-        booklet: document.getElementById('f-booklet').checked,
-        hologram: document.getElementById('f-holo').checked,
-      },
     };
     let modelId;
     if(isEdit){
@@ -1284,6 +1281,11 @@ function renderPoForm(main, existing){
         estShipWeekNum: wk,
         estShipYear: yr,
         estShipDate,
+        specialItems: {
+          chassisPlate: document.getElementById('f-chassis').checked,
+          booklet: document.getElementById('f-booklet').checked,
+          hologram: document.getElementById('f-holo').checked,
+        },
       };
       await db.collection('pos').doc(existing.id).update(fields);
       Object.assign(existing, fields); // avoid race with the async listener
@@ -1296,6 +1298,7 @@ function renderPoForm(main, existing){
       for(const c of rows){
         const po = {
           ...shared,
+          specialItems: { chassisPlate:false, booklet:false, hologram:false },
           colorLetter: c.letter,
           colorName: c.name,
           mengyiCode: `N${c.letter}${base}`,
@@ -1346,6 +1349,7 @@ function renderPoDetail(main){
         <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.motormaxPM||'—'}</div></div>
         <div><div class="field-label">Norev PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.norevPM||'—'}</div></div>
         <div><div class="field-label">Order qty</div><div class="field-val">${po.qty||'—'} <span style="font-size:11px;color:var(--ink-soft);">(Exp ${po.exportQty??'—'} / Dom ${po.domesticQty??'—'})</span></div></div>
+        <div><div class="field-label">Special items</div><div class="field-val" style="font-family:inherit; font-size:13px;">${[po.specialItems&&po.specialItems.chassisPlate?'Chassis plate':null, po.specialItems&&po.specialItems.booklet?'Booklet':null, po.specialItems&&po.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'None'}</div></div>
         <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(po)}</div></div>
         <div><div class="field-label">Progress</div><div class="field-val">${prog}%</div></div>
       </div>
@@ -1356,9 +1360,8 @@ function renderPoDetail(main){
         <div class="field-grid">
           <div><div class="field-label">Item Name</div><div class="field-val" style="font-family:inherit;">${model.modelName||'—'}</div></div>
           <div><div class="field-label">Scale</div><div class="field-val">${model.scale||'—'}</div></div>
-          <div><div class="field-label">Special items</div><div class="field-val" style="font-family:inherit; font-size:13px;">${[model.specialItems&&model.specialItems.chassisPlate?'Chassis plate':null, model.specialItems&&model.specialItems.booklet?'Booklet':null, model.specialItems&&model.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'None'}</div></div>
         </div>
-        <p style="font-size:12px;color:var(--ink-soft);margin:10px 0 0;">To change these, use "Edit item" above — updates apply to every colour sharing this base number.</p>
+        <p style="font-size:12px;color:var(--ink-soft);margin:10px 0 0;">To change these, use "Edit item" above — updates apply to every colour sharing this base number. (Special items are set per colour, above.)</p>
       `:`<div class="empty-state"><i class="ti ti-alert-triangle"></i>No linked model found.</div>`}
     </div>
     <div class="tabs">
@@ -1379,9 +1382,8 @@ function renderPoDetail(main){
 }
 
 function renderWorkflowTab(tc, po){
-  const model = modelFor(po);
   tc.innerHTML = WORKFLOW.map(phase=>{
-    const relevant = phase.tasks.filter(t=>!t.onlyIf || (model && model.specialItems && model.specialItems[t.onlyIf]));
+    const relevant = phase.tasks.filter(t=>!t.onlyIf || (po.specialItems && po.specialItems[t.onlyIf]));
     if(!relevant.length) return '';
     const doneCount = relevant.filter(t=>po.tasks && po.tasks[t.id] && po.tasks[t.id].done).length;
     const stampClass = doneCount===relevant.length ? 'complete' : doneCount>0 ? 'partial' : '';
