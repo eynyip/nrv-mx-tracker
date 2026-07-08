@@ -1045,7 +1045,8 @@ function renderPoForm(main, existing){
       <div class="form-grid">
         <div class="form-group"><label>MengYi base number (4-digit)</label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
         <div id="model-status" style="grid-column:1/-1; font-size:12.5px; color:var(--ink-soft);"></div>
-        <div class="form-group full" id="new-model-fields" style="display:none;">
+        <div class="form-group full">
+          <div class="section-title" style="margin:4px 0 8px;">Item overview — shared by every colour of this base number</div>
           <div class="form-grid" style="grid-template-columns:1fr 1fr;">
             <div class="form-group"><label>Item Name</label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
             <div class="form-group"><label>Scale</label>
@@ -1055,6 +1056,7 @@ function renderPoForm(main, existing){
               </select>
             </div>
             <div class="form-group full">
+              <label>Special items</label>
               <div class="checkbox-row">
                 <label><input type="checkbox" id="f-chassis" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.chassisPlate?'checked':''}> Chassis individually-numbered metal plate</label>
                 <label><input type="checkbox" id="f-booklet" ${existingModel&&existingModel.specialItems&&existingModel.specialItems.booklet?'checked':''}> Printed booklet</label>
@@ -1064,6 +1066,7 @@ function renderPoForm(main, existing){
           </div>
         </div>
         ${isEdit?`
+        <div class="section-title" style="margin:4px 0 8px; grid-column:1/-1;">This colour / PO</div>
         <div class="form-group"><label>Colour letter</label><input id="f-color-letter" maxlength="1" placeholder="A" value="${existing.colorLetter||''}"></div>
         <div class="form-group"><label>Colour name</label><input id="f-color-name" placeholder="e.g. Red" value="${existing.colorName||''}"></div>
         <div class="form-group"><label>Item code preview</label><div class="field-val" id="code-preview" style="padding-top:8px;">—</div></div>
@@ -1106,25 +1109,31 @@ function renderPoForm(main, existing){
       </div>
     </div>
   `;
+  let lastMatchedModelId = null;
   function refreshModelStatus(){
     const base = document.getElementById('f-mengyi').value.trim();
     const statusEl = document.getElementById('model-status');
-    const newFieldsEl = document.getElementById('new-model-fields');
     if(isEdit){
-      statusEl.innerHTML = existingModel ? `Linked to model <b>${existingModel.modelName}</b> (${existingModel.scale}). Model/tooling details are edited from the item's "Tooling & Model" tab.` : '';
-      newFieldsEl.style.display = 'none';
+      statusEl.innerHTML = existingModel ? `Base number <b>${existingModel.mengyiBaseNumber}</b> — the item overview above is shared with every other colour of this base number; changes here apply to all of them.` : '';
       return;
     }
     const found = state.models.find(m=>m.mengyiBaseNumber===base);
     if(base && found){
-      statusEl.innerHTML = `<span class="chip">Linked to existing model: ${found.modelName} (${found.scale})</span> — model/tooling fields won't be shown again here.`;
-      newFieldsEl.style.display = 'none';
+      if(lastMatchedModelId !== found.id){
+        document.getElementById('f-model').value = found.modelName||'';
+        document.getElementById('f-scale').value = found.scale||'1:12';
+        document.getElementById('f-chassis').checked = !!(found.specialItems&&found.specialItems.chassisPlate);
+        document.getElementById('f-booklet').checked = !!(found.specialItems&&found.specialItems.booklet);
+        document.getElementById('f-holo').checked = !!(found.specialItems&&found.specialItems.hologram);
+        lastMatchedModelId = found.id;
+      }
+      statusEl.innerHTML = `<span class="chip">Linked to existing item: ${found.modelName} (${found.scale})</span> — editable above; changes apply to every colour sharing base ${base}.`;
     } else if(base){
-      statusEl.innerHTML = `No model found for ${base} yet — fill in the model details below (one-time, shared by every colour of this number).`;
-      newFieldsEl.style.display = 'block';
+      lastMatchedModelId = null;
+      statusEl.innerHTML = `No item found for ${base} yet — the details above will create it (shared by every colour of this number).`;
     } else {
+      lastMatchedModelId = null;
       statusEl.innerHTML = '';
-      newFieldsEl.style.display = 'none';
     }
   }
 
@@ -1209,25 +1218,32 @@ function renderPoForm(main, existing){
     if(isEdit && !requireEdit(existing)) return;
     const base = document.getElementById('f-mengyi').value.trim();
     if(!base){ alert('Please enter the MengYi base number.'); return; }
+    const modelName = document.getElementById('f-model').value.trim();
+    if(!modelName){ alert('Please enter an item name.'); return; }
+    const modelFields = {
+      modelName,
+      scale: document.getElementById('f-scale').value,
+      specialItems: {
+        chassisPlate: document.getElementById('f-chassis').checked,
+        booklet: document.getElementById('f-booklet').checked,
+        hologram: document.getElementById('f-holo').checked,
+      },
+    };
     let modelId;
     if(isEdit){
       modelId = existing.modelId;
+      await db.collection('models').doc(modelId).update(modelFields);
+      if(existingModel) Object.assign(existingModel, modelFields); // avoid race with the async listener
     } else {
       const found = state.models.find(m=>m.mengyiBaseNumber===base);
       if(found){
         modelId = found.id;
+        await db.collection('models').doc(modelId).update(modelFields);
+        Object.assign(found, modelFields); // avoid race with the async listener
       } else {
-        const modelName = document.getElementById('f-model').value.trim();
-        if(!modelName){ alert('Please enter an item name for this new base number.'); return; }
         const newModel = {
           mengyiBaseNumber: base,
-          modelName,
-          scale: document.getElementById('f-scale').value,
-          specialItems: {
-            chassisPlate: document.getElementById('f-chassis').checked,
-            booklet: document.getElementById('f-booklet').checked,
-            hologram: document.getElementById('f-holo').checked,
-          },
+          ...modelFields,
           packing: {},
           toolingTasks: {},
           toolingLog: [],
@@ -1335,26 +1351,14 @@ function renderPoDetail(main){
       </div>
     </div>
     <div class="section-title" style="margin-top:4px;">Item Overview <span class="chip">shared across all colours of ${model?model.mengyiBaseNumber:'this base number'}</span></div>
-    <div class="phase-block" style="padding:16px 18px; margin-bottom:20px;" id="item-overview-block">
+    <div class="phase-block" style="padding:16px 18px; margin-bottom:20px;">
       ${model?`
-        <div class="form-grid">
-          <div class="form-group"><label>Item Name</label><input id="ov-model-name" value="${model.modelName||''}" ${canEditModel()?'':'disabled'}></div>
-          <div class="form-group"><label>Scale</label>
-            <select id="ov-model-scale" ${canEditModel()?'':'disabled'}>
-              <option value="1:12" ${model.scale==='1:12'?'selected':''}>1:12</option>
-              <option value="1:18" ${model.scale==='1:18'?'selected':''}>1:18</option>
-            </select>
-          </div>
-          <div class="form-group full">
-            <label>Special items</label>
-            <div class="checkbox-row">
-              <label><input type="checkbox" id="ov-chassis" ${model.specialItems&&model.specialItems.chassisPlate?'checked':''} ${canEditModel()?'':'disabled'}> Chassis individually-numbered metal plate</label>
-              <label><input type="checkbox" id="ov-booklet" ${model.specialItems&&model.specialItems.booklet?'checked':''} ${canEditModel()?'':'disabled'}> Printed booklet</label>
-              <label><input type="checkbox" id="ov-holo" ${model.specialItems&&model.specialItems.hologram?'checked':''} ${canEditModel()?'':'disabled'}> Hologram sticker (customer-provided)</label>
-            </div>
-          </div>
+        <div class="field-grid">
+          <div><div class="field-label">Item Name</div><div class="field-val" style="font-family:inherit;">${model.modelName||'—'}</div></div>
+          <div><div class="field-label">Scale</div><div class="field-val">${model.scale||'—'}</div></div>
+          <div><div class="field-label">Special items</div><div class="field-val" style="font-family:inherit; font-size:13px;">${[model.specialItems&&model.specialItems.chassisPlate?'Chassis plate':null, model.specialItems&&model.specialItems.booklet?'Booklet':null, model.specialItems&&model.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'None'}</div></div>
         </div>
-        ${canEditModel()?`<button class="btn btn-sm" id="ov-save" style="margin-top:10px;">Save item overview</button>`:''}
+        <p style="font-size:12px;color:var(--ink-soft);margin:10px 0 0;">To change these, use "Edit item" above — updates apply to every colour sharing this base number.</p>
       `:`<div class="empty-state"><i class="ti ti-alert-triangle"></i>No linked model found.</div>`}
     </div>
     <div class="tabs">
@@ -1367,18 +1371,6 @@ function renderPoDetail(main){
   document.getElementById('back-btn').addEventListener('click', ()=>{ state.activePoId=null; render(); });
   const editBtn = document.getElementById('edit-po-btn');
   if(editBtn) editBtn.addEventListener('click', ()=>{ state.editingPoId = po.id; state.activePoId = null; state.view='new'; render(); });
-  const ovSaveBtn = document.getElementById('ov-save');
-  if(ovSaveBtn) ovSaveBtn.addEventListener('click', async ()=>{
-    await db.collection('models').doc(model.id).update({
-      modelName: document.getElementById('ov-model-name').value.trim(),
-      scale: document.getElementById('ov-model-scale').value,
-      specialItems: {
-        chassisPlate: document.getElementById('ov-chassis').checked,
-        booklet: document.getElementById('ov-booklet').checked,
-        hologram: document.getElementById('ov-holo').checked,
-      },
-    });
-  });
   main.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{ state.detailTab=t.dataset.tab; renderPoDetail(main); }));
   const tc = document.getElementById('tab-content');
   if(state.detailTab==='workflow') renderWorkflowTab(tc, po);
