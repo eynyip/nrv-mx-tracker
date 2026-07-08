@@ -921,7 +921,7 @@ function poCardHTML(po){
     <div class="proj-card" data-pid="${po.id}">
       <div class="proj-thumb"><i class="ti ti-photo"></i></div>
       <div class="proj-info">
-        <div class="title">${po.poNumber||'—'} | ${po.mengyiCode||'—'} | ${model?model.modelName:'—'} | ${po.colorName||'—'}</div>
+        <div class="title">PO ${po.poNumber||'—'} | ${po.mengyiCode||'—'} | ${model?model.modelName:'—'} | ${po.colorName||'—'}</div>
         <div class="sub">${model?model.scale+' · ':''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}Tooling ${tp.done}/${tp.total}</div>
       </div>
       ${po.motormaxPM?`<span class="chip chip-pm"><i class="ti ti-user" style="font-size:12px;"></i> ${po.motormaxPM}</span>`:''}
