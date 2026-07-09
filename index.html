@@ -1003,7 +1003,11 @@ function renderOutstanding(main){
   groups.sort((a,b)=> (b.tasks.some(t=>t.urgent)?1:0) - (a.tasks.some(t=>t.urgent)?1:0));
 
   const toolingGroups = state.models
-    .map(m=>({m, incomplete:TOOLING_TASKS.filter(t=>!(m.toolingTasks && m.toolingTasks[t.id] && m.toolingTasks[t.id].done))}))
+    .map(m=>({
+      m,
+      incomplete: TOOLING_TASKS.filter(t=>!(m.toolingTasks && m.toolingTasks[t.id] && m.toolingTasks[t.id].done)),
+      orphaned: !state.pos.some(po=>po.modelId===m.id),
+    }))
     .filter(g=>g.incomplete.length);
 
   main.innerHTML = `
@@ -1029,6 +1033,7 @@ function renderOutstanding(main){
           <div class="list-row">
             <span class="task-text">${t.text}</span>
             <span class="chip">${g.m.modelName} (${g.m.mengyiBaseNumber})</span>
+            ${g.orphaned?`<span class="chip urgent">No colours left</span> <button class="btn btn-sm btn-ghost remove-orphan-model" data-model-id="${g.m.id}">Remove</button>`:''}
           </div>`).join('')).join('')}
       </div>` : ''}
     ` +
@@ -1040,6 +1045,16 @@ function renderOutstanding(main){
   document.getElementById('filter-pm').addEventListener('change', (e)=>{ state.outstandingFilterPM = e.target.value; render(); });
   document.getElementById('filter-item').addEventListener('change', (e)=>{ state.outstandingFilterItem = e.target.value; render(); });
   document.getElementById('filter-ponum').addEventListener('change', (e)=>{ state.outstandingFilterPONum = e.target.value; render(); });
+  main.querySelectorAll('.remove-orphan-model').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const modelId = btn.dataset.modelId;
+      const m = state.models.find(x=>x.id===modelId);
+      if(!confirm(`Remove "${m?m.modelName:'this item'}"? No colours reference it anymore, so its tooling tasks and location log will be deleted too. This cannot be undone.`)) return;
+      await db.collection('models').doc(modelId).delete();
+      state.models = state.models.filter(x=>x.id!==modelId); // avoid race with the async listener
+      render();
+    });
+  });
 }
 
 /* ---------- New / Edit PO form ---------- */
@@ -1377,9 +1392,18 @@ function renderPoDetail(main){
   const deleteBtn = document.getElementById('delete-po-btn');
   if(deleteBtn) deleteBtn.addEventListener('click', async ()=>{
     if(!requireEdit(po)) return;
-    if(!confirm(`Delete ${po.mengyiCode}${po.colorName?' — '+po.colorName:''}? This permanently removes this item's workflow, dates, and notes. This cannot be undone.`)) return;
+    const siblings = state.pos.filter(x=>x.modelId===po.modelId && x.id!==po.id);
+    const willAlsoDeleteModel = model && siblings.length===0;
+    const warning = willAlsoDeleteModel
+      ? `Delete ${po.mengyiCode}${po.colorName?' — '+po.colorName:''}? This is the last colour using this item/model, so its tooling tasks and location log will be deleted too. This permanently removes everything and cannot be undone.`
+      : `Delete ${po.mengyiCode}${po.colorName?' — '+po.colorName:''}? This permanently removes this item's workflow, dates, and notes. Other colours sharing this item (${siblings.map(s=>s.mengyiCode).join(', ')}) and the shared tooling are not affected. This cannot be undone.`;
+    if(!confirm(warning)) return;
     await db.collection('pos').doc(po.id).delete();
     state.pos = state.pos.filter(x=>x.id!==po.id); // avoid race with the async listener
+    if(willAlsoDeleteModel){
+      await db.collection('models').doc(model.id).delete();
+      state.models = state.models.filter(m=>m.id!==model.id); // avoid race with the async listener
+    }
     state.activePoId = null;
     state.view = 'projects';
     render();
