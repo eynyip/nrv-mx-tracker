@@ -100,13 +100,13 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .login-brand{display:flex; align-items:center; gap:12px; margin-bottom:4px;}
 .login-brand .stamp{
   width:38px;height:38px;border-radius:50%;border:2px solid var(--amber);
-  display:flex;align-items:center;justify-content:center;color:var(--amber);font-weight:700;font-size:14px;
+  display:flex;align-items:center;justify-content:center;color:var(--amber);font-weight:700;font-size:18px;
   transform:rotate(-8deg); flex-shrink:0;
 }
-.login-brand h1{font-size:19px; margin:0; color:#fff;}
-.login-tagline{font-size:11px; color:#8DA3BC; text-transform:uppercase; letter-spacing:.06em; margin:2px 0 0 50px;}
+.login-brand h1{font-size:23px; margin:0; color:#fff;}
+.login-tagline{font-size:15px; color:#8DA3BC; text-transform:uppercase; letter-spacing:.06em; margin:2px 0 0 50px;}
 .login-body{padding:30px 32px 34px;}
-.login-sub{color:var(--ink-soft); font-size:12.5px; margin:0 0 20px;}
+.login-sub{color:var(--ink-soft); font-size:16.5px; margin:0 0 20px;}
 .user-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:22px;}
 .user-tile{
   border:1px solid var(--line); border-radius:var(--radius); padding:14px 10px; text-align:center;
@@ -116,25 +116,25 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .user-tile.active{border-color:var(--steel); background:var(--steel-dim); box-shadow:inset 0 0 0 1.5px var(--steel);}
 .user-tile .initials{
   width:36px;height:36px;border-radius:50%;background:var(--steel);color:#fff;display:flex;
-  align-items:center;justify-content:center;font-size:13px;font-weight:600;margin:0 auto 8px;
+  align-items:center;justify-content:center;font-size:17px;font-weight:600;margin:0 auto 8px;
 }
 .pin-row{display:flex; gap:8px; margin-bottom:16px;}
 .pin-dot{
   flex:1; height:46px; border:1.5px solid var(--line); border-radius:var(--radius);
-  display:flex; align-items:center; justify-content:center; font-size:22px; background:var(--paper);
+  display:flex; align-items:center; justify-content:center; font-size:26px; background:var(--paper);
   font-family:'IBM Plex Mono',monospace; transition:.12s;
 }
 .pin-dot.filled{border-color:var(--steel); background:var(--steel-dim); color:var(--steel);}
 .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
 .key{
   padding:13px 0; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-raised);
-  font-size:16px; font-family:'IBM Plex Mono',monospace; transition:.12s;
+  font-size:20px; font-family:'IBM Plex Mono',monospace; transition:.12s;
 }
 .key:hover{background:var(--steel-dim); border-color:var(--steel);}
-.key.key-ok{background:var(--amber); border-color:var(--amber); color:#fff; font-weight:600; font-family:'IBM Plex Sans',sans-serif; font-size:13px;}
+.key.key-ok{background:var(--amber); border-color:var(--amber); color:#fff; font-weight:600; font-family:'IBM Plex Sans',sans-serif; font-size:17px;}
 .key.key-ok:hover{background:#B5691F; border-color:#B5691F;}
-.key.key-back{color:var(--ink-soft); font-size:15px;}
-.login-error{color:var(--red); font-size:12.5px; text-align:center; margin-top:12px; min-height:16px;}
+.key.key-back{color:var(--ink-soft); font-size:19px;}
+.login-error{color:var(--red); font-size:16.5px; text-align:center; margin-top:12px; min-height:16px;}
 
 /* ---------- App shell ---------- */
 #app{display:none; min-height:100vh; grid-template-columns:220px 1fr;}
@@ -145,51 +145,51 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .sb-brand{display:flex; align-items:center; gap:8px; padding:0 8px 20px; border-bottom:1px solid #2E3A4A; margin-bottom:16px;}
 .sb-brand .stamp{
   width:26px;height:26px;border-radius:50%;border:2px solid var(--amber);color:var(--amber);
-  display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;transform:rotate(-8deg);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;transform:rotate(-8deg);
 }
-.sb-brand span{font-weight:600; font-size:14.5px; color:#fff;}
+.sb-brand span{font-weight:600; font-size:16.5px; color:#fff;}
 .nav-item{
   display:flex; align-items:center; gap:10px; padding:10px 10px; border-radius:var(--radius);
-  color:#B7C1CE; font-size:13.5px; margin-bottom:2px;
+  color:#B7C1CE; font-size:15.5px; margin-bottom:2px;
 }
-.nav-item i{font-size:17px;}
+.nav-item i{font-size:19px;}
 .nav-item:hover{background:#28323F; color:#fff;}
 .nav-item.active{background:var(--steel); color:#fff;}
 .nav-badge{
-  margin-left:auto; background:var(--amber); color:#fff; font-size:11px; font-weight:600;
+  margin-left:auto; background:var(--amber); color:#fff; font-size:13px; font-weight:600;
   padding:1px 7px; border-radius:10px;
 }
 .sb-footer{margin-top:auto; padding-top:14px; border-top:1px solid #2E3A4A;}
-.sb-user{display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; color:#B7C1CE;}
+.sb-user{display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:14.5px; color:#B7C1CE;}
 .sb-user .initials{
   width:26px;height:26px;border-radius:50%;background:var(--steel);color:#fff;display:flex;
-  align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  align-items:center;justify-content:center;font-size:13px;font-weight:600;
 }
-.sb-link{color:#8494A6; font-size:12px; padding:6px 10px; display:block;}
+.sb-link{color:#8494A6; font-size:14px; padding:6px 10px; display:block;}
 .sb-link:hover{color:#fff;}
 
 .main{padding:26px 32px; overflow-y:auto; max-height:100vh;}
 .page-head{display:flex; align-items:center; justify-content:between; margin-bottom:20px;}
-.page-head h2{font-size:20px; margin:0; flex:1;}
+.page-head h2{font-size:22px; margin:0; flex:1;}
 .btn{
   border:1px solid var(--line); background:var(--paper-raised); padding:9px 16px; border-radius:var(--radius);
-  font-size:13.5px; font-weight:500; display:inline-flex; align-items:center; gap:6px;
+  font-size:15.5px; font-weight:500; display:inline-flex; align-items:center; gap:6px;
 }
 .btn:hover{border-color:var(--steel);}
 .btn-primary{background:var(--steel); color:#fff; border-color:var(--steel);}
 .btn-primary:hover{background:#324A68;}
-.btn-sm{padding:5px 10px; font-size:12.5px;}
+.btn-sm{padding:5px 10px; font-size:14.5px;}
 .btn-ghost{border-color:transparent; background:transparent;}
 .btn-ghost:hover{background:var(--steel-dim);}
 
 /* dashboard */
 .stat-row{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px;}
 .stat-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px;}
-.stat-card .num{font-size:26px; font-weight:600; font-family:'IBM Plex Mono',monospace;}
-.stat-card .lbl{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+.stat-card .num{font-size:28px; font-weight:600; font-family:'IBM Plex Mono',monospace;}
+.stat-card .lbl{font-size:14px; color:var(--ink-soft); margin-top:2px;}
 .stat-card.warn .num{color:var(--amber);}
 
-.section-title{font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:0 0 10px;}
+.section-title{font-size:15px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:0 0 10px;}
 .list-view .page-head h2{font-size:19px;}
 .list-view .section-title{font-size:19px;}
 
@@ -200,23 +200,23 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .proj-card:hover{border-color:var(--steel);}
 .proj-thumb{
   width:52px;height:40px;border-radius:4px;border:1px solid var(--line); background:var(--paper) center/cover no-repeat;
-  display:flex;align-items:center;justify-content:center; color:var(--ink-soft); font-size:16px; flex-shrink:0;
+  display:flex;align-items:center;justify-content:center; color:var(--ink-soft); font-size:18px; flex-shrink:0;
 }
 .proj-info{flex:1; min-width:0;}
-.proj-info .title{font-weight:600; font-size:14px;}
-.proj-info .sub{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; margin-top:2px;}
+.proj-info .title{font-weight:600; font-size:16px;}
+.proj-info .sub{font-size:14px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; margin-top:2px;}
 .progress-bar{width:120px; height:6px; background:var(--line); border-radius:3px; overflow:hidden; flex-shrink:0;}
 .progress-fill{height:100%; background:var(--steel);}
 .phase-badge{
-  font-size:11px; font-weight:600; padding:3px 9px; border-radius:10px; background:var(--steel-dim); color:var(--steel);
+  font-size:13px; font-weight:600; padding:3px 9px; border-radius:10px; background:var(--steel-dim); color:var(--steel);
   white-space:nowrap; flex-shrink:0;
 }
-.eta-tag{font-size:12px; color:var(--ink-soft); width:90px; flex-shrink:0;}
+.eta-tag{font-size:14px; color:var(--ink-soft); width:90px; flex-shrink:0;}
 .eta-tag.urgent{color:var(--red); font-weight:600;}
 
 /* table-ish list */
 .list-table{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
-.list-row{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); font-size:13px;}
+.list-row{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); font-size:15px;}
 .list-row:last-child{border-bottom:none;}
 .list-row:hover{background:var(--paper);}
 .task-check{
@@ -226,7 +226,7 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .task-check.done{background:var(--green); border-color:var(--green); color:#fff;}
 .task-text{flex:1;}
 .task-text.done{text-decoration:line-through; color:var(--ink-soft);}
-.chip{font-size:11px; padding:2px 8px; border-radius:8px; background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);}
+.chip{font-size:13px; padding:2px 8px; border-radius:8px; background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);}
 .chip.urgent{background:var(--red-dim); color:var(--red); border-color:var(--red);}
 .chip.chip-pm{background:var(--steel-dim); color:var(--steel); border-color:var(--steel); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
 .chip.chip-pm-ey{background:var(--steel-dim); color:var(--steel); border-color:var(--steel); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
@@ -239,30 +239,30 @@ input,select,textarea{font-family:inherit; font-size:16px;}
   display:flex; gap:24px;
 }
 .field-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px 20px; flex:1;}
-.field-label{font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); margin-bottom:3px;}
-.field-val{font-size:14px; font-weight:600; font-family:'IBM Plex Mono',monospace;}
+.field-label{font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); margin-bottom:3px;}
+.field-val{font-size:16px; font-weight:600; font-family:'IBM Plex Mono',monospace;}
 .tabs{display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:18px;}
-.tab{padding:9px 16px; font-size:13.5px; color:var(--ink-soft); border-bottom:2px solid transparent; margin-bottom:-1px;}
+.tab{padding:9px 16px; font-size:15.5px; color:var(--ink-soft); border-bottom:2px solid transparent; margin-bottom:-1px;}
 .tab.active{color:var(--ink); border-color:var(--steel); font-weight:600;}
 .phase-block{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px;}
 .phase-header{
-  display:flex; align-items:center; gap:10px; padding:14px 18px; font-weight:600; font-size:13.5px;
+  display:flex; align-items:center; gap:10px; padding:14px 18px; font-weight:600; font-size:15.5px;
 }
 .phase-header .stamp-circle{
   width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line); display:flex; align-items:center;
-  justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace; flex-shrink:0;
+  justify-content:center; font-size:13px; font-family:'IBM Plex Mono',monospace; flex-shrink:0;
 }
 .phase-header .stamp-circle.complete{background:var(--green); border-color:var(--green); color:#fff;}
 .phase-header .stamp-circle.partial{border-color:var(--amber); color:var(--amber);}
 .phase-tasks{padding:0 18px 14px;}
 .task-row{display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-top:1px solid var(--paper);}
 .task-row:first-child{border-top:none;}
-.task-meta{font-size:11.5px; color:var(--ink-soft); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
-.task-meta button{background:none;border:none;color:var(--steel);font-size:11.5px;padding:0;text-decoration:underline;}
+.task-meta{font-size:13.5px; color:var(--ink-soft); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
+.task-meta button{background:none;border:none;color:var(--steel);font-size:13.5px;padding:0;text-decoration:underline;}
 
 .color-tabs{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
 .color-tab{
-  padding:7px 14px; border:1px solid var(--line); border-radius:16px; font-size:13px; font-family:'IBM Plex Mono',monospace;
+  padding:7px 14px; border:1px solid var(--line); border-radius:16px; font-size:15px; font-family:'IBM Plex Mono',monospace;
   background:var(--paper-raised);
 }
 .color-tab.active{background:var(--steel); border-color:var(--steel); color:#fff;}
@@ -272,12 +272,12 @@ input,select,textarea{font-family:inherit; font-size:16px;}
   display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; position:relative;
 }
 .item-photo-frame img{width:100%; height:100%; object-fit:cover;}
-.item-photo-frame .upload-hint{color:var(--ink-soft); font-size:12px; text-align:center; padding:10px;}
-.photo-upload-btn{position:absolute; bottom:6px; right:6px; font-size:11px;}
+.item-photo-frame .upload-hint{color:var(--ink-soft); font-size:14px; text-align:center; padding:10px;}
+.photo-upload-btn{position:absolute; bottom:6px; right:6px; font-size:13px;}
 
-.packing-table{width:100%; border-collapse:collapse; font-size:13px;}
+.packing-table{width:100%; border-collapse:collapse; font-size:15px;}
 .packing-table td, .packing-table th{padding:9px 12px; border-bottom:1px solid var(--line); text-align:left;}
-.packing-table th{color:var(--ink-soft); font-weight:600; font-size:11.5px; text-transform:uppercase;}
+.packing-table th{color:var(--ink-soft); font-weight:600; font-size:13.5px; text-transform:uppercase;}
 .packing-table input{width:70px; padding:5px 7px; border:1px solid var(--line); border-radius:4px;}
 
 /* form */
@@ -285,14 +285,14 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
 .form-group{margin-bottom:4px;}
 .form-group.full{grid-column:1/-1;}
-.form-group label{display:block; font-size:12px; font-weight:600; margin-bottom:5px; color:var(--ink-soft);}
+.form-group label{display:block; font-size:14px; font-weight:600; margin-bottom:5px; color:var(--ink-soft);}
 .form-group input, .form-group select{
   width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-raised);
 }
 .form-group input:focus, .form-group select:focus{outline:none; border-color:var(--steel);}
 .checkbox-row{display:flex; flex-wrap:wrap; gap:10px 28px; align-items:center; margin-top:4px;}
 .required-mark{color:var(--red); font-weight:700;}
-.checkbox-row label{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400; color:var(--ink); white-space:nowrap;}
+.checkbox-row label{display:flex; align-items:center; gap:8px; font-size:15px; font-weight:400; color:var(--ink); white-space:nowrap;}
 .checkbox-row label input[type="checkbox"]{flex-shrink:0; width:16px; height:16px; margin:0;}
 @media(max-width:900px){
   .checkbox-row{flex-direction:column; align-items:flex-start; gap:14px;}
@@ -303,17 +303,17 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 }
 .color-grid-header{
   padding:0 2px 8px; border-bottom:1px solid var(--line); margin-bottom:8px;
-  font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft);
+  font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft);
 }
 .color-grid-row{padding:6px 2px; margin-bottom:6px;}
 .color-grid-row input{
   width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius);
-  font-size:14px; background:var(--paper-raised);
+  font-size:16px; background:var(--paper-raised);
 }
 .color-grid-row input:focus{outline:none; border-color:var(--steel);}
-.color-grid-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:13.5px; color:var(--steel);}
+.color-grid-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:15.5px; color:var(--steel);}
 .color-input-row input{flex:1;}
-.color-input-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--steel); width:90px;}
+.color-input-row .code-preview{font-family:'IBM Plex Mono',monospace; font-size:15px; color:var(--steel); width:90px;}
 
 .modal-overlay{
   position:fixed; inset:0; background:rgba(27,36,48,.4); display:none; align-items:center; justify-content:center; z-index:50;
@@ -322,7 +322,7 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 .modal-box{background:var(--paper-raised); border-radius:var(--radius); padding:24px; width:340px;}
 
 .empty-state{padding:60px 20px; text-align:center; color:var(--ink-soft);}
-.empty-state i{font-size:34px; margin-bottom:10px; display:block;}
+.empty-state i{font-size:36px; margin-bottom:10px; display:block;}
 
 @media(max-width:900px){
   #app.show{grid-template-columns:1fr;}
@@ -340,7 +340,7 @@ input,select,textarea{font-family:inherit; font-size:16px;}
   <div class="login-card">
     <div class="login-header">
       <div class="login-brand"><div class="stamp">MM</div><h1>Motormax Tracker</h1></div>
-      <div class="login-tagline">Norev OEM Project Tracker</div>
+      <div class="login-tagline">NRV OEM Project Tracker</div>
     </div>
     <div class="login-body">
       <p class="login-sub">Select your name, then enter your 4-digit PIN.</p>
@@ -374,7 +374,7 @@ input,select,textarea{font-family:inherit; font-size:16px;}
 <!-- Change PIN modal -->
 <div class="modal-overlay" id="pin-modal">
   <div class="modal-box">
-    <h3 style="margin-top:0;font-size:15px;">Change PIN</h3>
+    <h3 style="margin-top:0;font-size:17px;">Change PIN</h3>
     <div class="form-group"><label>New 4-digit PIN</label><input type="password" maxlength="4" id="new-pin-input"></div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="btn" id="pin-cancel">Cancel</button>
@@ -593,7 +593,7 @@ function renderLoginUsers(){
   grid.innerHTML = state.users.map(u=>`
     <div class="user-tile" data-uid="${u.id}">
       <div class="initials">${initials(u.name)}</div>
-      <div style="font-size:13px;font-weight:500;">${u.name}</div>
+      <div style="font-size:17px;font-weight:500;">${u.name}</div>
     </div>`).join('');
   grid.querySelectorAll('.user-tile').forEach(el=>{
     el.addEventListener('click', ()=>selectLoginUser(el.dataset.uid));
@@ -941,7 +941,7 @@ function poCardHTML(po){
         <div class="title">PO ${po.poNumber||'—'} | ${po.mengyiCode||'—'} | ${model?model.modelName:'—'} | ${po.colorName||'—'}</div>
         <div class="sub">${model?model.scale+' · ':''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}Tooling ${tp.done}/${tp.total}</div>
       </div>
-      ${po.motormaxPM?`<span class="chip ${pmChipClass(po.motormaxPM)}"><i class="ti ti-user" style="font-size:12px;"></i> ${po.motormaxPM}</span>`:''}
+      ${po.motormaxPM?`<span class="chip ${pmChipClass(po.motormaxPM)}"><i class="ti ti-user" style="font-size:14px;"></i> ${po.motormaxPM}</span>`:''}
       <span class="phase-badge">${currentPhaseLabel(po)}</span>
       <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
       <div class="eta-tag ${urgentEta?'urgent':''}" style="width:120px;">${eta}</div>
@@ -962,7 +962,7 @@ function outstandingRowHTML(t){
       <span class="task-text">${t.text}</span>
       <span class="chip">${t.phaseLabel.replace(/Phase \d+ — /,'')}</span>
       <span class="chip">${t.poTitle}</span>
-      ${t.motormaxPM?`<span class="chip ${pmChipClass(t.motormaxPM)}"><i class="ti ti-user" style="font-size:12px;"></i> ${t.motormaxPM}</span>`:''}
+      ${t.motormaxPM?`<span class="chip ${pmChipClass(t.motormaxPM)}"><i class="ti ti-user" style="font-size:14px;"></i> ${t.motormaxPM}</span>`:''}
       ${t.urgent?'<span class="chip urgent">Due soon</span>':''}
       <button class="btn btn-sm btn-ghost open-po">Open</button>
     </div>`;
@@ -1078,7 +1078,7 @@ function renderPoForm(main, existing){
     <div class="form-card">
       <div class="form-grid">
         <div class="form-group"><label>MengYi base number (4-digit) <span class="required-mark">*</span></label><input id="f-mengyi" maxlength="4" placeholder="9020" value="${isEdit?(existing.mengyiBaseNumber||''):''}" ${isEdit?'disabled':''}></div>
-        <div id="model-status" style="grid-column:1/-1; font-size:12.5px; color:var(--ink-soft);"></div>
+        <div id="model-status" style="grid-column:1/-1; font-size:14.5px; color:var(--ink-soft);"></div>
         <div class="form-group"><label>Item Name <span class="required-mark">*</span></label><input id="f-model" placeholder="e.g. Renault 5 Turbo" value="${existingModel?existingModel.modelName:''}"></div>
         <div class="form-group"><label>Scale <span class="required-mark">*</span></label>
           <select id="f-scale">
@@ -1121,7 +1121,7 @@ function renderPoForm(main, existing){
             <input id="f-eta-week" type="number" min="1" max="53" placeholder="Wk (1-53)" style="width:50%;" value="${existing.estShipWeekNum?existing.estShipWeekNum:''}">
             <input id="f-eta-year" type="number" placeholder="Year" style="width:50%;" value="${existing.estShipYear?existing.estShipYear:new Date().getFullYear()}">
           </div>
-          <div id="f-eta-preview" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+          <div id="f-eta-preview" style="font-size:14px;color:var(--ink-soft);margin-top:4px;"></div>
         </div>
         `:``}
         ${!isEdit?`
@@ -1375,9 +1375,9 @@ function renderPoDetail(main){
         <div><div class="field-label">Scale</div><div class="field-val">${model?model.scale:'—'}</div></div>
         <div><div class="field-label">Motormax PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.motormaxPM||'—'}</div></div>
         <div><div class="field-label">Norev PM</div><div class="field-val" style="font-family:inherit;font-weight:600;">${po.norevPM||'—'}</div></div>
-        <div><div class="field-label">Order qty</div><div class="field-val">${po.qty||'—'} <span style="font-size:11px;color:var(--ink-soft);">(Exp ${po.exportQty??'—'} / Dom ${po.domesticQty??'—'})</span></div></div>
-        <div><div class="field-label">Special items</div><div class="field-val" style="font-family:inherit; font-size:13px;">${[po.specialItems&&po.specialItems.chassisPlate?'Chassis plate':null, po.specialItems&&po.specialItems.booklet?'Booklet':null, po.specialItems&&po.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'None'}</div></div>
-        <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:12.5px;">${formatShipWeek(po)}</div></div>
+        <div><div class="field-label">Order qty</div><div class="field-val">${po.qty||'—'} <span style="font-size:13px;color:var(--ink-soft);">(Exp ${po.exportQty??'—'} / Dom ${po.domesticQty??'—'})</span></div></div>
+        <div><div class="field-label">Special items</div><div class="field-val" style="font-family:inherit; font-size:15px;">${[po.specialItems&&po.specialItems.chassisPlate?'Chassis plate':null, po.specialItems&&po.specialItems.booklet?'Booklet':null, po.specialItems&&po.specialItems.hologram?'Hologram':null].filter(Boolean).join(', ')||'None'}</div></div>
+        <div><div class="field-label">Est. ship</div><div class="field-val" style="font-size:14.5px;">${formatShipWeek(po)}</div></div>
         <div><div class="field-label">Progress</div><div class="field-val">${prog}%</div></div>
       </div>
     </div>
@@ -1388,7 +1388,7 @@ function renderPoDetail(main){
           <div><div class="field-label">Item Name</div><div class="field-val" style="font-family:inherit;">${model.modelName||'—'}</div></div>
           <div><div class="field-label">Scale</div><div class="field-val">${model.scale||'—'}</div></div>
         </div>
-        <p style="font-size:12px;color:var(--ink-soft);margin:10px 0 0;">To change these, use "Edit item" above — updates apply to every colour sharing this base number. (Special items are set per colour, above.)</p>
+        <p style="font-size:14px;color:var(--ink-soft);margin:10px 0 0;">To change these, use "Edit item" above — updates apply to every colour sharing this base number. (Special items are set per colour, above.)</p>
       `:`<div class="empty-state"><i class="ti ti-alert-triangle"></i>No linked model found.</div>`}
     </div>
     <div class="tabs">
@@ -1453,7 +1453,7 @@ function taskRowHTML(po, t){
   const rounds = rec.quotationRounds || [];
   return `
     <div class="task-row" data-tid="${t.id}">
-      <div class="task-check ${done?'done':''}" data-action="toggle">${done?'<i class="ti ti-check" style="font-size:13px;"></i>':''}</div>
+      <div class="task-check ${done?'done':''}" data-action="toggle">${done?'<i class="ti ti-check" style="font-size:15px;"></i>':''}</div>
       <div style="flex:1;">
         <div class="task-text ${done?'done':''}">${t.text} ${urgent?'<span class="chip urgent">Due soon</span>':''}</div>
         <div class="task-meta">
@@ -1563,7 +1563,7 @@ function renderToolingTab(tc, po, model){
         ${TOOLING_TASKS.map(t=>toolingTaskRowHTML(model, t)).join('')}
       </div>
     </div>
-    ${siblings.length?`<p style="font-size:12.5px;color:var(--ink-soft);">Also shares this tooling: ${siblings.map(s=>s.mengyiCode).join(', ')}</p>`:''}
+    ${siblings.length?`<p style="font-size:14.5px;color:var(--ink-soft);">Also shares this tooling: ${siblings.map(s=>s.mengyiCode).join(', ')}</p>`:''}
 
     <div class="section-title" style="margin-top:20px;">Tooling location tracking</div>
     <div class="phase-block" style="padding:14px 18px;">
@@ -1571,7 +1571,7 @@ function renderToolingTab(tc, po, model){
         <table class="packing-table" style="margin-bottom:12px;">
           <tr><th>Date</th><th>Direction</th><th>From</th><th>To</th><th>Remarks</th></tr>
           ${toolingLog.slice().reverse().map(e=>`<tr><td class="mono">${fmtDate(e.date)}</td><td>${e.direction}</td><td>${e.fromLocation||''}</td><td>${e.toLocation||''}</td><td>${e.remarks||''}</td></tr>`).join('')}
-        </table>` : `<p style="font-size:13px;color:var(--ink-soft);margin-top:0;">No tooling movements logged yet.</p>`}
+        </table>` : `<p style="font-size:15px;color:var(--ink-soft);margin-top:0;">No tooling movements logged yet.</p>`}
       ${editable?`
         <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
           <div class="form-group"><label>Date</label><input id="tool-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -1622,7 +1622,7 @@ function toolingTaskRowHTML(model, t){
   const done = !!rec.done;
   return `
     <div class="task-row" data-tid="${t.id}">
-      <div class="task-check ${done?'done':''}" data-action="tooling-toggle">${done?'<i class="ti ti-check" style="font-size:13px;"></i>':''}</div>
+      <div class="task-check ${done?'done':''}" data-action="tooling-toggle">${done?'<i class="ti ti-check" style="font-size:15px;"></i>':''}</div>
       <div style="flex:1;">
         <div class="task-text ${done?'done':''}">${t.text}</div>
         <div class="task-meta">
@@ -1648,7 +1648,7 @@ function renderPackingTab(tc, model){
         <td class="mono">${pack.pcsPerMaster??'—'}</td>
       </tr>
     </table>
-    <p style="color:var(--ink-soft);font-size:12.5px;margin-top:10px;">Packed in polyfoam box, then closed/window box, then 外箱, then 百寶箱. Shared by every colour of this model.</p>
+    <p style="color:var(--ink-soft);font-size:14.5px;margin-top:10px;">Packed in polyfoam box, then closed/window box, then 外箱, then 百寶箱. Shared by every colour of this model.</p>
     ${editable?`<button class="btn btn-sm" id="pk-save" style="margin-top:8px;">Save packing</button>`:''}
   `;
   const pkSave = document.getElementById('pk-save');
