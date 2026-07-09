@@ -64,11 +64,11 @@
 *{box-sizing:border-box;}
 body{
   margin:0; background:var(--paper); color:var(--ink);
-  font-family:'IBM Plex Sans',sans-serif; font-size:14px; line-height:1.5;
+  font-family:'IBM Plex Sans',sans-serif; font-size:16px; line-height:1.5;
 }
 .mono{font-family:'IBM Plex Mono',monospace;}
 button{font-family:inherit; cursor:pointer;}
-input,select,textarea{font-family:inherit; font-size:14px;}
+input,select,textarea{font-family:inherit; font-size:16px;}
 
 /* ---------- Login ---------- */
 #login-screen{
@@ -190,6 +190,8 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 .stat-card.warn .num{color:var(--amber);}
 
 .section-title{font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:0 0 10px;}
+.list-view .page-head h2{font-size:19px;}
+.list-view .section-title{font-size:19px;}
 
 .proj-card{
   background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius);
@@ -227,6 +229,9 @@ input,select,textarea{font-family:inherit; font-size:14px;}
 .chip{font-size:11px; padding:2px 8px; border-radius:8px; background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);}
 .chip.urgent{background:var(--red-dim); color:var(--red); border-color:var(--red);}
 .chip.chip-pm{background:var(--steel-dim); color:var(--steel); border-color:var(--steel); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
+.chip.chip-pm-ey{background:var(--steel-dim); color:var(--steel); border-color:var(--steel); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
+.chip.chip-pm-leo{background:var(--red-dim); color:var(--red); border-color:var(--red); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
+.chip.chip-pm-eric{background:var(--green-dim); color:var(--green); border-color:var(--green); font-weight:600; display:inline-flex; align-items:center; gap:4px;}
 
 /* project detail */
 .detail-head{
@@ -754,6 +759,12 @@ function outstandingForPo(po){
 }
 function allOutstanding(){ return state.pos.flatMap(po=>outstandingForPo(po)); }
 function poTitle(po){ return `${po.poNumber?('PO '+po.poNumber+' — '):''}${po.mengyiCode||'Untitled'}`; }
+function pmChipClass(name){
+  if(name==='EY') return 'chip-pm-ey';
+  if(name==='Leo Fan') return 'chip-pm-leo';
+  if(name==='Eric Lai') return 'chip-pm-eric';
+  return 'chip-pm';
+}
 function packingFor(model){
   if(!model) return { pcsPerCarton:null, cartonsPerMaster:null, pcsPerMaster:null };
   const d = PACKING_DEFAULTS[model.scale] || {pcsPerCarton:null, cartonsPerMaster:null};
@@ -773,7 +784,8 @@ function render(){
   // it — that would silently wipe out anything the person has typed but
   // not yet saved. The form only ever needs to render once per visit.
   if(state.view==='new' && document.getElementById('save-po')) return;
-  if(state.activePoId){ renderPoDetail(main); return; }
+  if(state.activePoId){ main.classList.remove('list-view'); renderPoDetail(main); return; }
+  main.classList.toggle('list-view', ['dashboard','projects','outstanding'].includes(state.view));
   if(state.view==='dashboard') renderDashboard(main);
   else if(state.view==='projects') renderPosList(main);
   else if(state.view==='outstanding') renderOutstanding(main);
@@ -929,7 +941,7 @@ function poCardHTML(po){
         <div class="title">PO ${po.poNumber||'—'} | ${po.mengyiCode||'—'} | ${model?model.modelName:'—'} | ${po.colorName||'—'}</div>
         <div class="sub">${model?model.scale+' · ':''}${po.norevNumber?('Norev '+po.norevNumber+' · '):''}Tooling ${tp.done}/${tp.total}</div>
       </div>
-      ${po.motormaxPM?`<span class="chip chip-pm"><i class="ti ti-user" style="font-size:12px;"></i> ${po.motormaxPM}</span>`:''}
+      ${po.motormaxPM?`<span class="chip ${pmChipClass(po.motormaxPM)}"><i class="ti ti-user" style="font-size:12px;"></i> ${po.motormaxPM}</span>`:''}
       <span class="phase-badge">${currentPhaseLabel(po)}</span>
       <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
       <div class="eta-tag ${urgentEta?'urgent':''}" style="width:120px;">${eta}</div>
@@ -950,7 +962,7 @@ function outstandingRowHTML(t){
       <span class="task-text">${t.text}</span>
       <span class="chip">${t.phaseLabel.replace(/Phase \d+ — /,'')}</span>
       <span class="chip">${t.poTitle}</span>
-      ${t.motormaxPM?`<span class="chip chip-pm"><i class="ti ti-user" style="font-size:12px;"></i> ${t.motormaxPM}</span>`:''}
+      ${t.motormaxPM?`<span class="chip ${pmChipClass(t.motormaxPM)}"><i class="ti ti-user" style="font-size:12px;"></i> ${t.motormaxPM}</span>`:''}
       ${t.urgent?'<span class="chip urgent">Due soon</span>':''}
       <button class="btn btn-sm btn-ghost open-po">Open</button>
     </div>`;
@@ -1455,7 +1467,7 @@ function taskRowHTML(po, t){
         </div>
         ${t.rounds?`<div class="task-meta">
           <button data-action="addround">Log a quotation round</button>
-          ${rounds.map((r,i)=>`<span class="chip">Round ${i+1}: ${fmtDate(r.date)}</span>`).join(' ')}
+          ${rounds.map((r,i)=>`<span class="chip">Round ${i+1}: ${fmtDate(r.date)} <button data-action="delround" data-round-idx="${i}" style="border:none;background:none;color:var(--red);cursor:pointer;padding:0 0 0 4px;">×</button></span>`).join(' ')}
         </div>`:''}
       </div>
     </div>`;
@@ -1515,6 +1527,16 @@ function attachTaskEvents(tc, po){
       const rec = (po.tasks && po.tasks[tid]) || {};
       const rounds = rec.quotationRounds || [];
       await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.quotationRounds`]: [...rounds, { date: val }] });
+    });
+    row.querySelectorAll('[data-action="delround"]').forEach(delBtn=>{
+      delBtn.addEventListener('click', async ()=>{
+        if(!requireEdit(po)) return;
+        const idx = Number(delBtn.dataset.roundIdx);
+        const rec = (po.tasks && po.tasks[tid]) || {};
+        const rounds = rec.quotationRounds || [];
+        if(!confirm(`Delete quotation round ${idx+1}?`)) return;
+        await db.collection('pos').doc(po.id).update({ [`tasks.${tid}.quotationRounds`]: rounds.filter((r,i)=>i!==idx) });
+      });
     });
     const noteBtn = row.querySelector('[data-action="note"]');
     if(noteBtn) noteBtn.addEventListener('click', async ()=>{
